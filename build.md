@@ -799,21 +799,55 @@ const generateInvoice = (order, client) => {
 ### Add New Features
 **Prompt:** "Add a time tracking feature to the CRM. Include start/stop timers on orders, time logging, hourly rate calculations, and time-based invoicing. Update the order data model, add timer components, and modify pricing calculations."
 
+### Invoice Generation & PDF Export ✅ COMPLETED
+**Prompt:** "Create a complete invoice generation system with PDF export using jsPDF and html2canvas. Include:
+1. A professional invoice template with customizable branding
+2. An invoice editor modal where users can customize all fields like a document editor
+3. Custom logo upload capability
+4. Editable company information, colors, payment instructions, and terms
+5. Line item management (add, remove, edit items)
+6. Section toggles to show/hide parts of the invoice
+7. Live preview that updates in real-time
+8. Integration with order detail modal (Edit Invoice and Quick Preview buttons)
+Make it fully customizable so each business can brand their invoices."
+
+**Files:** `src/utils/invoiceGenerator.js`, Invoice Editor Modal in `App.jsx`, expanded `CONFIG.invoice` settings in `business-config.js`
+
+### Modal Enhancements ✅ COMPLETED
+**Prompt:** "Enhance all modals to be fully responsive and add fullscreen capability:
+1. Make modals responsive with mobile-first padding (p-2 sm:p-4)
+2. Add a fullscreen toggle button to all modal headers
+3. Use proper flex layouts (flex-1 for scrollable body, flex-shrink-0 for headers/footers)
+4. Responsive text sizing (text-lg sm:text-xl for headings)
+5. Proper icons for expand (⤢) and compress (arrows inward) states
+6. Apply to New Client, New Order, Order Detail, and Settings modals"
+
+### Status Tags & Visual Indicators ✅ COMPLETED
+**Prompt:** "Add comprehensive status tags throughout the UI:
+1. Dashboard Recent Orders - Show status, priority, and balance due tags
+2. Kanban Board Cards - Add store, priority, and balance due badges
+3. Client Cards - Display order count, total value, paid amount, and recent orders
+4. Use colored badges with the status/priority color schemes from CONFIG
+5. Make tags responsive and properly spaced"
+
 ### Style Customization
 **Prompt:** "Change the color scheme from dark blue/green to [YOUR COLORS]. Update Tailwind classes throughout the components to use [PRIMARY_COLOR] as the main brand color and [ACCENT_COLOR] for highlights and CTAs."
 
 ## Testing Checklist
 
-- [ ] Component renders without errors
-- [ ] Sample data displays in kanban view
-- [ ] New order modal opens with pricing calculator
-- [ ] Order status changes update the kanban board
-- [ ] Client management works (add/edit/view)
-- [ ] Data persists on page refresh
-- [ ] Export functionality works
-- [ ] Invoice generation opens print dialog
-- [ ] Responsive design works on mobile
-- [ ] All animations and transitions work
+- [x] Component renders without errors
+- [x] Sample data displays in kanban view
+- [x] New order modal opens with pricing calculator
+- [x] Order status changes update the kanban board
+- [x] Client management works (add/edit/view)
+- [x] Data persists on page refresh
+- [x] Export functionality works
+- [x] Invoice generation works (PDF download & preview)
+- [x] Invoice editor fully functional with live preview
+- [x] Responsive design works on mobile
+- [x] All animations and transitions work
+- [x] Modals work in fullscreen mode
+- [x] Status tags display correctly throughout UI
 
 ## Deployment
 
@@ -825,3 +859,10 @@ Since this is a React component, you can:
 4. **Embed in existing site** - Bundle and include in any website
 
 The component is completely self-contained with localStorage persistence, so it works offline and requires no backend infrastructure.
+
+**Dependencies:**
+- React 18+
+- Tailwind CSS
+- jsPDF (for invoice PDF generation)
+- html2canvas (for invoice rendering)
+- Iconify (for brand logos)

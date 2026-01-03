@@ -2,7 +2,7 @@
 
 A comprehensive development plan for building a complete CRM system from landing page to full third-party integration.
 
-**Overall Progress: 28% Complete** ████████░░░░░░░░░░░░░░░░░░░░░░░░
+**Overall Progress: 35% Complete** ███████████░░░░░░░░░░░░░░░░░░░░░
 
 ---
 
@@ -95,6 +95,11 @@ A comprehensive development plan for building a complete CRM system from landing
 - [x] Empty states for all views
 - [x] Store visibility toggles in settings
 - [x] **BONUS:** Store connection status system with Connect/Disconnect buttons
+- [x] **BONUS:** Status tags throughout UI (dashboard, kanban, orders)
+- [x] **BONUS:** Priority tags for urgent/high priority orders
+- [x] **BONUS:** Balance Due tags on unpaid orders
+- [x] **BONUS:** Enhanced client cards with order count, total value, and paid amount
+- [x] **BONUS:** Recent orders preview on client cards
 
 **Deliverables:** ✅ Orders View, Clients View, Dashboard with integrated components
 
@@ -142,6 +147,10 @@ A comprehensive development plan for building a complete CRM system from landing
 - [x] Validation system
 - [x] Form state management
 - [x] Modal system architecture
+- [x] **BONUS:** Responsive modal design (mobile-first)
+- [x] **BONUS:** Fullscreen modal toggle with compress/expand icons
+- [x] **BONUS:** Responsive padding and text sizing (p-2 sm:p-4, text-lg sm:text-xl)
+- [x] **BONUS:** Flexible modal layouts (flex-1 for body, flex-shrink-0 for header/footer)
 
 ---
 
@@ -183,8 +192,8 @@ A comprehensive development plan for building a complete CRM system from landing
 
 ---
 
-## 🚧 Phase 5: Advanced Features (IN PROGRESS - 10%)
-███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 10%
+## 🚧 Phase 5: Advanced Features (IN PROGRESS - 35%)
+███████████░░░░░░░░░░░░░░░░░░░░░ 35%
 
 ### 5.1 Kanban Board View
 **Status:** NOT STARTED
@@ -201,23 +210,104 @@ A comprehensive development plan for building a complete CRM system from landing
 
 **Deliverable:** Kanban view in App.jsx
 
-### 5.2 Invoice System
-**Status:** PARTIAL (10%)
+### 5.2 Invoice System ✅ 🚀
+**Status:** CORE COMPLETED (100%) | ENHANCEMENTS IN PROGRESS (20%)
+████████████████████████░░░░░░░░ 65%
 
-**Completed:**
+**Core Features - Completed:**
 - [x] Helper function for invoice printing (printInvoice in helpers.js)
+- [x] PDF generation with jsPDF and html2canvas
+- [x] Professional invoice template (modern style with gradients)
+- [x] Fully customizable invoice editor (document-like editing)
+- [x] Custom logo upload for client branding
+- [x] Editable company information (name, tagline, contact details)
+- [x] Color customization (primary and accent colors)
+- [x] Line item management (add, remove, edit, reorder items)
+- [x] Section toggles (show/hide header, items, totals, etc.)
+- [x] Live preview with real-time updates
+- [x] Payment instructions customization
+- [x] Terms & conditions editing
+- [x] Invoice number generation from order numbers
+- [x] Integration with order detail modal (Edit Invoice & Quick Preview buttons)
 
-**Remaining Tasks:**
-- [ ] Create invoice generator UI
-- [ ] Build PDF export functionality
-- [ ] Design printable invoice template
-- [ ] Add invoice number generation
-- [ ] Implement invoice status tracking
-- [ ] Create invoice history
-- [ ] Add payment recording
-- [ ] Build recurring invoice system
+**Industry-Specific Enhancements:**
 
-**Deliverable:** Invoice view in App.jsx
+#### 🎨 For Creatives (Artists, Designers, Photographers)
+- [ ] Usage rights & licensing terms selector (commercial/personal/editorial)
+- [ ] Deliverable specifications fields (file formats, resolution, dimensions)
+- [ ] Revision tracking (e.g., "3 rounds included, $X per additional")
+- [ ] Rush fee toggle with percentage/flat rate options
+- [ ] Digital signature field for client approval
+- [ ] Portfolio/preview watermark toggle for unpaid invoices
+- [ ] Project/shoot details section
+
+#### 💼 For Solo Contractors/Freelancers
+- [ ] Time tracking integration (hourly rates with tracked hours)
+- [ ] Milestone/project-based billing sections
+- [ ] Retainer management (show used vs available hours/budget)
+- [ ] Expense reimbursements section with receipt attachments
+- [ ] Multiple payment method badges (Venmo, PayPal, Zelle, wire, check)
+- [ ] Late fee automation (calculate based on days overdue)
+- [ ] Partial payment tracking with payment schedule
+
+#### 📦 For Product-Based Businesses
+- [ ] SKU/product catalog with thumbnail images
+- [ ] Bulk discount tiers (e.g., "10+ items = 15% off")
+- [ ] Shipping calculator (weight-based, flat rate, free over $X)
+- [ ] Tax calculation by jurisdiction (auto-lookup by zip/state)
+- [ ] Inventory status indicators (in stock, backorder, pre-order)
+- [ ] Product variant support (size, color, style in line items)
+- [ ] Package tracking integration
+
+#### 🏢 For Service Businesses (Consultants, Agencies)
+- [ ] Service package bundles with descriptions
+- [ ] Team member hourly rates (e.g., Junior $50, Senior $150)
+- [ ] Scope of work section with deliverables checklist
+- [ ] Subscription/recurring billing options
+- [ ] Success/performance bonus line items
+- [ ] Referral credit tracking and application
+- [ ] Engagement letter/contract linking
+
+#### 🏛️ For Corporate/B2B
+- [ ] Purchase order (PO) number field
+- [ ] Department/cost center codes
+- [ ] Net 30/60/90 payment terms selector
+- [ ] Multi-currency support with exchange rates
+- [ ] Approval workflow status tracking
+- [ ] W9/tax documentation links
+- [ ] Vendor/client ID fields
+
+**Universal UX Improvements:**
+- [ ] "What do you sell?" onboarding wizard (auto-selects template)
+- [ ] Industry template library (minimalist, bold, creative, corporate)
+- [ ] Clone previous invoice feature (one-click duplicate)
+- [ ] Client-specific defaults (auto-populate repeat customers)
+- [ ] Smart tax calculator (auto-calculate by location)
+- [ ] Suggested pricing based on industry averages
+- [ ] Custom fields builder (add your own fields to any invoice)
+- [ ] Conditional sections (show field X if client type = Y)
+- [ ] Invoice themes library (10+ professional styles)
+- [ ] Language/currency switcher
+- [ ] Brand kit import (one-click load logo, colors, fonts)
+
+**Client Experience Features:**
+- [ ] Online payment links embedded in invoice
+- [ ] "Pay Now" button with payment processor integration
+- [ ] Client portal (view all invoices, payment history)
+- [ ] Mobile-optimized invoice view
+- [ ] One-click approve/dispute functionality
+- [ ] Auto-send payment reminders (7, 14, 30 days)
+- [ ] Payment confirmation emails
+
+**General Remaining Tasks:**
+- [ ] Invoice history tracking with version control
+- [ ] Email sending integration (SendGrid/Mailgun)
+- [ ] Recurring invoice system with automation
+- [ ] Invoice analytics (avg payment time, overdue reports)
+- [ ] Batch invoice generation (multiple clients)
+- [ ] Invoice templates marketplace
+
+**Deliverable:** ✅ Invoice generator (utils/invoiceGenerator.js) and Invoice Editor Modal in App.jsx
 
 ### 5.3 Time Tracking
 **Tasks:**
