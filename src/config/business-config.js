@@ -16,12 +16,12 @@ export const CONFIG = {
   },
 
   statuses: [
-    { id: "quote", label: "Quote", color: "#6366f1", icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z'/></svg>", description: "Initial quote sent" },
-    { id: "confirmed", label: "Confirmed", color: "#d97706", icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'/></svg>", description: "Order confirmed by client" },
-    { id: "in_progress", label: "In Progress", color: "#0ea5e9", icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z'/><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M15 12a3 3 0 11-6 0 3 3 0 016 0z'/></svg>", description: "Currently working on order" },
-    { id: "ready", label: "Ready", color: "#8b5cf6", icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'/></svg>", description: "Order complete, ready for pickup/delivery" },
-    { id: "shipped", label: "Shipped", color: "#059669", icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M13 10V3L4 14h7v7l9-11h-7z'/></svg>", description: "Order shipped to client" },
-    { id: "completed", label: "Completed", color: "#16a34a", icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M5 13l4 4L19 7'/></svg>", description: "Order completed and paid" }
+    { id: "quote", label: "Quote", color: "#6366f1", icon: "<svg class='w-5 h-5' fill='none' stroke='#a5b4fc' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z'/></svg>", description: "Initial quote sent" },
+    { id: "confirmed", label: "Confirmed", color: "#d97706", icon: "<svg class='w-5 h-5' fill='none' stroke='#fbbf24' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'/></svg>", description: "Order confirmed by client" },
+    { id: "in_progress", label: "In Progress", color: "#0ea5e9", icon: "<svg class='w-5 h-5' fill='none' stroke='#7dd3fc' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z'/><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M15 12a3 3 0 11-6 0 3 3 0 016 0z'/></svg>", description: "Currently working on order" },
+    { id: "ready", label: "Ready", color: "#8b5cf6", icon: "<svg class='w-5 h-5' fill='none' stroke='#c4b5fd' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'/></svg>", description: "Order complete, ready for pickup/delivery" },
+    { id: "shipped", label: "Shipped", color: "#059669", icon: "<svg class='w-5 h-5' fill='none' stroke='#6ee7b7' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M13 10V3L4 14h7v7l9-11h-7z'/></svg>", description: "Order shipped to client" },
+    { id: "completed", label: "Completed", color: "#16a34a", icon: "<svg class='w-5 h-5' fill='none' stroke='#86efac' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M5 13l4 4L19 7'/></svg>", description: "Order completed and paid" }
   ],
 
   productTypes: [
@@ -128,13 +128,49 @@ export const CONFIG = {
     invoiceNumberStart: 1000,
     showItemizedTax: true,
     showSubtotal: true,
-    showDiscount: false,
+    showDiscount: true,
     showShipping: false,
+    taxRate: 8.5, // Default tax percentage
+    discountType: 'percentage', // 'percentage' or 'flat'
+    discountValue: 0,
+    
+    // Processing Fees (pass to customer)
+    enableProcessingFees: true, // Toggle to pass fees to customer
+    paymentProcessorFees: {
+      venmo: { rate: 1.9, fixed: 0.10, label: 'Venmo Fee' },
+      paypal: { rate: 2.9, fixed: 0.30, label: 'PayPal Fee' },
+      zelle: { rate: 0, fixed: 0, label: 'Zelle (No Fee)' },
+      card: { rate: 2.9, fixed: 0.30, label: 'Card Processing' },
+      stripe: { rate: 2.9, fixed: 0.30, label: 'Stripe Fee' },
+      square: { rate: 2.6, fixed: 0.10, label: 'Square Fee' },
+      check: { rate: 0, fixed: 0, label: 'Check (No Fee)' },
+      wire: { rate: 0, fixed: 0, label: 'Wire (No Fee)' },
+      cash: { rate: 0, fixed: 0, label: 'Cash (No Fee)' }
+    },
+    
+    // Sales Channel Fees (marketplace cuts)
+    salesChannelFees: {
+      direct: { rate: 0, label: 'Direct Sale (No Fee)' },
+      amazon: { rate: 15.0, label: 'Amazon Marketplace (15%)' },
+      shopify: { rate: 2.9, fixed: 0.30, label: 'Shopify Payments' },
+      etsy: { rate: 6.5, fixed: 0.20, label: 'Etsy Fees' },
+      ebay: { rate: 12.9, label: 'eBay Final Value Fee' },
+      facebook: { rate: 5.0, label: 'Facebook Marketplace' },
+      other: { rate: 0, label: 'Other' }
+    },
     
     // Payment Terms
     paymentTermsDays: 30,
     paymentInstructions: "Payment due within 30 days. Venmo: @anchorcrm or check payable to Anchor LLC",
-    acceptedPaymentMethods: "Credit Card, Venmo, Check, Bank Transfer",
+    acceptedPaymentMethods: ["venmo", "paypal", "zelle", "card", "check", "wire"],
+    paymentMethodDetails: {
+      venmo: "@anchorcrm",
+      paypal: "payments@anchorcrm.com",
+      zelle: "hello@anchorcrm.com",
+      wire: "Account: 123456789, Routing: 987654321",
+      card: "Stripe payment link available",
+      check: "Make payable to: Anchor LLC"
+    },
     thankYouNote: "Thank you for choosing ANCHOR! We appreciate your business.",
     terms: "Balance due upon completion. Custom orders require 50% deposit. All sales final on custom work.",
     lateFeeDays: 30,
@@ -144,6 +180,108 @@ export const CONFIG = {
     footerText: "This invoice was generated by ANCHOR CRM",
     showFooter: true
   },
+
+  // Custom Fields System
+  customFieldTypes: [
+    { id: 'text', label: 'Text Input', icon: '📝' },
+    { id: 'number', label: 'Number', icon: '🔢' },
+    { id: 'date', label: 'Date', icon: '📅' },
+    { id: 'dropdown', label: 'Dropdown', icon: '📋' },
+    { id: 'checkbox', label: 'Checkbox', icon: '☑️' },
+    { id: 'textarea', label: 'Long Text', icon: '📄' }
+  ],
+
+  customFields: [
+    // === PROJECT INFORMATION ===
+    { id: 'cf_project_name', label: 'Project Name', type: 'text', category: 'project', required: false },
+    { id: 'cf_project_type', label: 'Project Type', type: 'dropdown', category: 'project', options: ['New Construction', 'Renovation', 'Repair', 'Maintenance', 'Design', 'Consultation'], required: false },
+    { id: 'cf_project_phase', label: 'Project Phase', type: 'dropdown', category: 'project', options: ['Planning', 'In Progress', 'Review', 'Final Delivery', 'Complete'], required: false },
+    { id: 'cf_completion_date', label: 'Target Completion Date', type: 'date', category: 'project', required: false },
+    
+    // === LOCATION & SITE ===
+    { id: 'cf_job_site', label: 'Job Site Address', type: 'text', category: 'location', required: false },
+    { id: 'cf_service_location', label: 'Service Location', type: 'text', category: 'location', required: false },
+    { id: 'cf_room_area', label: 'Room/Area', type: 'text', category: 'location', required: false },
+    
+    // === PERSONNEL & ASSIGNMENTS ===
+    { id: 'cf_technician', label: 'Assigned Technician', type: 'text', category: 'personnel', required: false },
+    { id: 'cf_project_manager', label: 'Project Manager', type: 'text', category: 'personnel', required: false },
+    { id: 'cf_team_size', label: 'Team Size', type: 'number', category: 'personnel', required: false },
+    
+    // === TIME TRACKING ===
+    { id: 'cf_service_date', label: 'Service Date', type: 'date', category: 'time', required: false },
+    { id: 'cf_labor_hours', label: 'Labor Hours', type: 'number', category: 'time', required: false },
+    { id: 'cf_estimated_hours', label: 'Estimated Hours', type: 'number', category: 'time', required: false },
+    
+    // === COSTS & MATERIALS ===
+    { id: 'cf_materials_cost', label: 'Materials Cost', type: 'number', category: 'costs', required: false },
+    { id: 'cf_equipment_cost', label: 'Equipment Cost', type: 'number', category: 'costs', required: false },
+    { id: 'cf_subcontractor_cost', label: 'Subcontractor Cost', type: 'number', category: 'costs', required: false },
+    
+    // === COMPLIANCE & PERMITS ===
+    { id: 'cf_permit', label: 'Permit Number', type: 'text', category: 'compliance', required: false },
+    { id: 'cf_inspection_date', label: 'Inspection Date', type: 'date', category: 'compliance', required: false },
+    { id: 'cf_license_number', label: 'License Number', type: 'text', category: 'compliance', required: false },
+    
+    // === CREATIVE & DELIVERABLES ===
+    { id: 'cf_usage_rights', label: 'Usage Rights', type: 'dropdown', category: 'creative', options: ['1 year', '2 years', '5 years', 'Unlimited'], required: false },
+    { id: 'cf_revisions', label: 'Revision Rounds', type: 'number', category: 'creative', required: false },
+    { id: 'cf_deliverable_format', label: 'Deliverable Format', type: 'text', category: 'creative', required: false },
+    { id: 'cf_file_format', label: 'File Format', type: 'dropdown', category: 'creative', options: ['PDF', 'JPG', 'PNG', 'AI', 'PSD', 'MP4', 'MOV', 'Multiple'], required: false },
+    
+    // === WARRANTY & TERMS ===
+    { id: 'cf_warranty', label: 'Warranty Period', type: 'dropdown', category: 'warranty', options: ['30 days', '90 days', '6 months', '1 year', '2 years', '5 years'], required: false },
+    { id: 'cf_guarantee', label: 'Service Guarantee', type: 'text', category: 'warranty', required: false },
+    
+    // === REFERENCE & TRACKING ===
+    { id: 'cf_po_number', label: 'PO Number', type: 'text', category: 'reference', required: false },
+    { id: 'cf_reference', label: 'Reference Number', type: 'text', category: 'reference', required: false },
+    { id: 'cf_work_order', label: 'Work Order #', type: 'text', category: 'reference', required: false },
+    { id: 'cf_contract_number', label: 'Contract Number', type: 'text', category: 'reference', required: false },
+    
+    // === NOTES & DETAILS ===
+    { id: 'cf_special_instructions', label: 'Special Instructions', type: 'textarea', category: 'notes', required: false },
+    { id: 'cf_client_notes', label: 'Client Notes', type: 'textarea', category: 'notes', required: false },
+    { id: 'cf_internal_notes', label: 'Internal Notes', type: 'textarea', category: 'notes', required: false }
+  ],
+
+  fieldTemplates: [
+    {
+      id: 'residential_construction',
+      name: 'Residential Construction',
+      description: 'Home building and renovation projects',
+      icon: '🏗️',
+      fields: ['cf_job_site', 'cf_permit', 'cf_job_phase', 'cf_labor_hours', 'cf_materials_cost', 'cf_po_number']
+    },
+    {
+      id: 'commercial_construction',
+      name: 'Commercial Construction',
+      description: 'Commercial building projects',
+      icon: '🏢',
+      fields: ['cf_job_site', 'cf_permit', 'cf_job_phase', 'cf_labor_hours', 'cf_materials_cost', 'cf_po_number', 'cf_reference']
+    },
+    {
+      id: 'freelance_creative',
+      name: 'Creative/Freelance Work',
+      description: 'Design, photo, video projects',
+      icon: '🎨',
+      fields: ['cf_project_name', 'cf_usage_rights', 'cf_revisions', 'cf_deliverables', 'cf_reference']
+    },
+    {
+      id: 'service_call',
+      name: 'Service Call',
+      description: 'Repair and maintenance services',
+      icon: '🔧',
+      fields: ['cf_service_date', 'cf_technician', 'cf_service_location', 'cf_warranty', 'cf_reference']
+    },
+    {
+      id: 'basic_invoice',
+      name: 'Basic Invoice',
+      description: 'Simple invoice with minimal fields',
+      icon: '📄',
+      fields: ['cf_po_number', 'cf_notes']
+    }
+  ],
 
   notifications: {
     emailEnabled: true,

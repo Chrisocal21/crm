@@ -25,7 +25,15 @@ const Icon = ({ icon, className = "w-5 h-5" }) => {
 function App() {
   // State management - ALL hooks must be at top level
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [authView, setAuthView] = useState('landing') // 'landing', 'signin', 'signup'
   const [currentView, setCurrentView] = useState('landing') // landing, dashboard, orders, clients, analytics, invoices
+  const [authFormData, setAuthFormData] = useState({
+    email: '',
+    password: '',
+    name: '',
+    confirmPassword: '',
+    agreeToTerms: false
+  })
   const [orders, setOrders] = useState([])
   const [clients, setClients] = useState([])
   const [stats, setStats] = useState({})
@@ -48,6 +56,18 @@ function App() {
     const saved = localStorage.getItem('anchor_crm_custom_config')
     return saved ? JSON.parse(saved) : {}
   })
+  const [activeTimers, setActiveTimers] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_active_timers')
+    return saved ? JSON.parse(saved) : {}
+  })
+  const [currentTime, setCurrentTime] = useState(Date.now())
+  const [revenuePeriod, setRevenuePeriod] = useState('30') // For analytics chart (7, 30, or 90 days)
+  const [kanbanFilters, setKanbanFilters] = useState({ store: 'all', search: '' }) // For Kanban filtering
+  const [selectedOrders, setSelectedOrders] = useState([]) // For bulk operations
+  const [globalSearch, setGlobalSearch] = useState('') // For global search
+  const [searchResults, setSearchResults] = useState({ orders: [], clients: [], visible: false })
+  const [showTermsModal, setShowTermsModal] = useState(false) // For Terms of Service modal
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false) // For Privacy Policy modal // Search results
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isModalFullscreen, setIsModalFullscreen] = useState(false)
   const [showInvoiceEditor, setShowInvoiceEditor] = useState(false)
@@ -100,6 +120,19 @@ function App() {
     dataManager.initializeData()
     loadData()
   }, [])
+
+  // Update timer display every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Save active timers to localStorage
+  useEffect(() => {
+    localStorage.setItem('anchor_crm_active_timers', JSON.stringify(activeTimers))
+  }, [activeTimers])
 
   const loadData = () => {
     const allOrders = dataManager.orders.getAll()
@@ -267,7 +300,8 @@ function App() {
         completedDate: null
       },
       payments: [],
-      notes: formData.notes || ''
+      notes: formData.notes || '',
+      customFieldValues: formData.customFieldValues || {}
     }
     
     dataManager.orders.save(newOrder)
@@ -367,6 +401,678 @@ function App() {
     localStorage.setItem('anchor_crm_connected_stores', JSON.stringify(updated))
   }
 
+  // Timer functions
+  const startTimer = (orderId) => {
+    setActiveTimers(prev => ({
+      ...prev,
+      [orderId]: {
+        startTime: Date.now(),
+        description: ''
+      }
+    }))
+  }
+
+  const stopTimer = (orderId) => {
+    const timer = activeTimers[orderId]
+    if (!timer) return
+
+    const duration = Date.now() - timer.startTime
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
+
+    const timeEntry = {
+      id: `time_${Date.now()}`,
+      startTime: timer.startTime,
+      endTime: Date.now(),
+      duration: duration,
+      description: timer.description || 'Work session',
+      createdAt: new Date().toISOString()
+    }
+
+    const updatedOrder = {
+      ...order,
+      timeEntries: [...(order.timeEntries || []), timeEntry]
+    }
+
+    dataManager.orders.save(updatedOrder)
+    loadData()
+
+    // Remove from active timers
+    const newTimers = { ...activeTimers }
+    delete newTimers[orderId]
+    setActiveTimers(newTimers)
+  }
+
+  const updateTimerDescription = (orderId, description) => {
+    setActiveTimers(prev => ({
+      ...prev,
+      [orderId]: {
+        ...prev[orderId],
+        description
+      }
+    }))
+  }
+
+  const deleteTimeEntry = (orderId, entryId) => {
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
+
+    const updatedOrder = {
+      ...order,
+      timeEntries: (order.timeEntries || []).filter(e => e.id !== entryId)
+    }
+
+    dataManager.orders.save(updatedOrder)
+    loadData()
+  }
+
+  const formatDuration = (ms) => {
+    const seconds = Math.floor(ms / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (days > 0) {
+      return `${days}d ${hours % 24}h ${minutes % 60}m`
+    } else if (hours > 0) {
+      return `${hours}h ${minutes % 60}m ${seconds % 60}s`
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`
+    } else {
+      return `${seconds}s`
+    }
+  }
+
+  const getTotalTrackedTime = (order) => {
+    if (!order.timeEntries || order.timeEntries.length === 0) return 0
+    return order.timeEntries.reduce((sum, entry) => sum + entry.duration, 0)
+  }
+
+  // Bulk operations functions
+  const toggleOrderSelection = (orderId) => {
+    setSelectedOrders(prev => 
+      prev.includes(orderId) 
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    )
+  }
+
+  const selectAllOrders = (ordersList) => {
+    if (selectedOrders.length === ordersList.length) {
+      setSelectedOrders([])
+    } else {
+      setSelectedOrders(ordersList.map(o => o.id))
+    }
+  }
+
+  const bulkUpdateStatus = (newStatus) => {
+    selectedOrders.forEach(orderId => {
+      const order = orders.find(o => o.id === orderId)
+      if (order) {
+        const updatedOrder = {
+          ...order,
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        }
+        dataManager.orders.save(updatedOrder)
+      }
+    })
+    loadData()
+    setSelectedOrders([])
+  }
+
+  const bulkDelete = () => {
+    if (window.confirm(`Are you sure you want to delete ${selectedOrders.length} order(s)? This cannot be undone.`)) {
+      selectedOrders.forEach(orderId => {
+        dataManager.orders.delete(orderId)
+      })
+      loadData()
+      setSelectedOrders([])
+    }
+  }
+
+  const exportToCSV = (ordersList) => {
+    const csvRows = []
+    
+    // Headers
+    csvRows.push([
+      'Order Number',
+      'Client Name',
+      'Client Email',
+      'Status',
+      'Store',
+      'Priority',
+      'Product/Service',
+      'Total Amount',
+      'Paid Amount',
+      'Balance Due',
+      'Created Date',
+      'Due Date',
+      'Notes'
+    ].join(','))
+    
+    // Data rows
+    ordersList.forEach(order => {
+      const client = clients.find(c => c.id === order.clientId)
+      const status = activeConfig.statuses.find(s => s.id === order.status)
+      const store = CONFIG.stores.find(s => s.id === order.store)
+      const priority = CONFIG.priorities.find(p => p.id === order.priority)
+      
+      const productDesc = order.items && order.items.length > 0
+        ? order.items.map(item => `${item.quantity || 1}x ${item.description || activeConfig.productTypes.find(pt => pt.id === item.type)?.label || item.type}`).join('; ')
+        : order.product?.description || ''
+      
+      csvRows.push([
+        order.orderNumber || '',
+        client?.name || '',
+        client?.email || '',
+        status?.label || order.status,
+        store?.label || order.store,
+        priority?.label || order.priority,
+        `"${productDesc.replace(/"/g, '""')}"`,
+        order.pricing?.total || 0,
+        order.pricing?.paid || 0,
+        order.pricing?.balance || 0,
+        order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '',
+        order.dueDate ? new Date(order.dueDate).toLocaleDateString() : '',
+        `"${(order.notes || '').replace(/"/g, '""')}"`
+      ].join(','))
+    })
+    
+    const csvContent = csvRows.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `orders_export_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // Global search function
+  const performGlobalSearch = (query) => {
+    if (!query || query.trim().length < 2) {
+      setSearchResults({ orders: [], clients: [], visible: false })
+      return
+    }
+
+    const searchLower = query.toLowerCase().trim()
+    
+    // Search orders
+    const matchingOrders = orders.filter(order => {
+      const client = clients.find(c => c.id === order.clientId)
+      const orderNumber = order.orderNumber?.toLowerCase() || ''
+      const clientName = client?.name?.toLowerCase() || ''
+      const productDesc = order.items?.map(item => 
+        `${item.description || activeConfig.productTypes.find(pt => pt.id === item.type)?.label || ''}`
+      ).join(' ').toLowerCase() || order.product?.description?.toLowerCase() || ''
+      const notes = order.notes?.toLowerCase() || ''
+      
+      return orderNumber.includes(searchLower) ||
+             clientName.includes(searchLower) ||
+             productDesc.includes(searchLower) ||
+             notes.includes(searchLower)
+    }).slice(0, 5) // Limit to 5 results
+    
+    // Search clients
+    const matchingClients = clients.filter(client => {
+      const name = client.name?.toLowerCase() || ''
+      const email = client.email?.toLowerCase() || ''
+      const phone = client.phone?.toLowerCase() || ''
+      const company = client.company?.toLowerCase() || ''
+      
+      return name.includes(searchLower) ||
+             email.includes(searchLower) ||
+             phone.includes(searchLower) ||
+             company.includes(searchLower)
+    }).slice(0, 5) // Limit to 5 results
+    
+    setSearchResults({
+      orders: matchingOrders,
+      clients: matchingClients,
+      visible: true
+    })
+  }
+
+  // Sign In Page
+  if (!isLoggedIn && authView === 'signin') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
+        <div className="w-full max-w-md">
+          {/* Logo Header */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center space-x-3 mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center font-bold text-2xl">
+                ⚓
+              </div>
+              <span className="text-3xl font-bold tracking-tight">ANCHOR</span>
+            </div>
+            <h1 className="text-2xl font-bold mb-2">Welcome Back</h1>
+            <p className="text-slate-400">Sign in to your account to continue</p>
+          </div>
+
+          {/* Sign In Form */}
+          <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-800/50 p-8 shadow-2xl">
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              setIsLoggedIn(true)
+              setCurrentView('dashboard')
+            }}>
+              {/* Email Field */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={authFormData.email}
+                  onChange={(e) => setAuthFormData({...authFormData, email: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="your@email.com"
+                  required
+                />
+              </div>
+
+              {/* Password Field */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={authFormData.password}
+                  onChange={(e) => setAuthFormData({...authFormData, password: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
+
+              {/* Forgot Password Link */}
+              <div className="text-right mb-6">
+                <a href="#" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                  Forgot password?
+                </a>
+              </div>
+
+              {/* Sign In Button */}
+              <button
+                type="submit"
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg font-semibold transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transform hover:scale-[1.02]"
+              >
+                Sign In
+              </button>
+            </form>
+
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-slate-900 text-slate-400">or</span>
+              </div>
+            </div>
+
+            {/* Sign Up Link */}
+            <div className="text-center">
+              <p className="text-slate-400">
+                Don't have an account?{' '}
+                <button
+                  onClick={() => setAuthView('signup')}
+                  className="text-blue-400 hover:text-blue-300 font-semibold transition-colors"
+                >
+                  Sign up
+                </button>
+              </p>
+            </div>
+          </div>
+
+          {/* Back to Home */}
+          <div className="text-center mt-6">
+            <button
+              onClick={() => setAuthView('landing')}
+              className="text-sm text-slate-400 hover:text-slate-300 transition-colors"
+            >
+              ← Back to home
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Sign Up Page
+  if (!isLoggedIn && authView === 'signup') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          {/* Logo Header */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center space-x-3 mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center font-bold text-2xl">
+                ⚓
+              </div>
+              <span className="text-3xl font-bold tracking-tight">ANCHOR</span>
+            </div>
+            <h1 className="text-2xl font-bold mb-2">Create Your Account</h1>
+            <p className="text-slate-400">Get started with ANCHOR today</p>
+          </div>
+
+          {/* Sign Up Form */}
+          <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-800/50 p-8 shadow-2xl">
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              if (authFormData.password === authFormData.confirmPassword && authFormData.agreeToTerms) {
+                setIsLoggedIn(true)
+                setCurrentView('dashboard')
+              }
+            }}>
+              {/* Name Field */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={authFormData.name}
+                  onChange={(e) => setAuthFormData({...authFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+
+              {/* Email Field */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={authFormData.email}
+                  onChange={(e) => setAuthFormData({...authFormData, email: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="your@email.com"
+                  required
+                />
+              </div>
+
+              {/* Password Field */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={authFormData.password}
+                  onChange={(e) => setAuthFormData({...authFormData, password: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="Create a password"
+                  required
+                  minLength={8}
+                />
+                <p className="text-xs text-slate-500 mt-1">At least 8 characters</p>
+              </div>
+
+              {/* Confirm Password Field */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  value={authFormData.confirmPassword}
+                  onChange={(e) => setAuthFormData({...authFormData, confirmPassword: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="Confirm your password"
+                  required
+                />
+                {authFormData.password !== authFormData.confirmPassword && authFormData.confirmPassword && (
+                  <p className="text-xs text-red-400 mt-1">Passwords do not match</p>
+                )}
+              </div>
+
+              {/* Terms Checkbox */}
+              <div className="mb-6">
+                <label className="flex items-start space-x-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={authFormData.agreeToTerms}
+                    onChange={(e) => setAuthFormData({...authFormData, agreeToTerms: e.target.checked})}
+                    className="mt-1 w-4 h-4 rounded border-slate-600 bg-slate-800/50 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                    required
+                  />
+                  <span className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">
+                    I agree to the{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }}
+                      className="text-blue-400 hover:text-blue-300 underline"
+                    >
+                      Terms of Service
+                    </button>
+                    {' '}and{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); setShowPrivacyModal(true); }}
+                      className="text-blue-400 hover:text-blue-300 underline"
+                    >
+                      Privacy Policy
+                    </button>
+                  </span>
+                </label>
+              </div>
+
+              {/* Sign Up Button */}
+              <button
+                type="submit"
+                disabled={authFormData.password !== authFormData.confirmPassword || !authFormData.agreeToTerms}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg font-semibold transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transform hover:scale-[1.02] disabled:transform-none disabled:shadow-none"
+              >
+                Create Account
+              </button>
+            </form>
+
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-slate-900 text-slate-400">or</span>
+              </div>
+            </div>
+
+            {/* Sign In Link */}
+            <div className="text-center">
+              <p className="text-slate-400">
+                Already have an account?{' '}
+                <button
+                  onClick={() => setAuthView('signin')}
+                  className="text-blue-400 hover:text-blue-300 font-semibold transition-colors"
+                >
+                  Sign in
+                </button>
+              </p>
+            </div>
+          </div>
+
+          {/* Back to Home */}
+          <div className="text-center mt-6">
+            <button
+              onClick={() => setAuthView('landing')}
+              className="text-sm text-slate-400 hover:text-slate-300 transition-colors"
+            >
+              ← Back to home
+            </button>
+          </div>
+        </div>
+
+        {/* Terms of Service Modal */}
+        {showTermsModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setShowTermsModal(false)}>
+            <div className="bg-slate-900 rounded-2xl border border-slate-800 max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-800">
+                <h2 className="text-2xl font-bold">Terms of Service</h2>
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              {/* Modal Content */}
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
+                <div className="space-y-4 text-slate-300">
+                  <p className="text-sm text-slate-400">Last updated: January 3, 2026</p>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">1. Acceptance of Terms</h3>
+                    <p>By accessing and using ANCHOR CRM, you accept and agree to be bound by the terms and provision of this agreement.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">2. Use License</h3>
+                    <p>Permission is granted to temporarily use ANCHOR CRM for personal, non-commercial transitory viewing only. This is the grant of a license, not a transfer of title.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">3. User Account</h3>
+                    <p>You are responsible for maintaining the confidentiality of your account and password. You agree to accept responsibility for all activities that occur under your account.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">4. Data Storage</h3>
+                    <p>ANCHOR stores your data locally in your browser. You are responsible for backing up your data. We are not liable for any data loss.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">5. Prohibited Uses</h3>
+                    <p>You may not use ANCHOR for any illegal purpose or to violate any laws. You agree not to use the service to transmit any malicious code or attempt to gain unauthorized access.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">6. Disclaimer</h3>
+                    <p>ANCHOR is provided "as is" without any warranties, expressed or implied. We do not guarantee that the service will be uninterrupted or error-free.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">7. Limitation of Liability</h3>
+                    <p>In no event shall ANCHOR or its suppliers be liable for any damages arising out of the use or inability to use the service.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">8. Modifications</h3>
+                    <p>ANCHOR reserves the right to revise these terms at any time. By using this service, you agree to be bound by the current version of these Terms of Service.</p>
+                  </section>
+                </div>
+              </div>
+              
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-slate-800">
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg font-semibold transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Privacy Policy Modal */}
+        {showPrivacyModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setShowPrivacyModal(false)}>
+            <div className="bg-slate-900 rounded-2xl border border-slate-800 max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-800">
+                <h2 className="text-2xl font-bold">Privacy Policy</h2>
+                <button
+                  onClick={() => setShowPrivacyModal(false)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              {/* Modal Content */}
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
+                <div className="space-y-4 text-slate-300">
+                  <p className="text-sm text-slate-400">Last updated: January 3, 2026</p>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">1. Information We Collect</h3>
+                    <p>ANCHOR collects information that you provide directly to us, including your name, email address, and any data you enter into the system.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">2. How We Use Your Information</h3>
+                    <p>We use the information we collect to provide, maintain, and improve our services, and to communicate with you about your account.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">3. Data Storage</h3>
+                    <p>All your data is stored locally in your browser's localStorage. We do not transmit or store your data on external servers. Your data remains on your device.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">4. Data Sharing</h3>
+                    <p>Since ANCHOR is a client-side application, we do not share your data with third parties. Your data never leaves your browser.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">5. Security</h3>
+                    <p>We take reasonable measures to help protect your information. However, no method of transmission over the internet is 100% secure.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">6. Cookies and Tracking</h3>
+                    <p>ANCHOR uses localStorage to save your data locally. We do not use cookies or third-party tracking tools.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">7. Your Rights</h3>
+                    <p>You have the right to access, update, or delete your personal information at any time through the application settings. You can clear all data by clearing your browser's localStorage.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">8. Changes to This Policy</h3>
+                    <p>We may update this privacy policy from time to time. We will notify you of any changes by posting the new policy on this page.</p>
+                  </section>
+                  
+                  <section>
+                    <h3 className="text-lg font-semibold text-white mb-2">9. Contact Us</h3>
+                    <p>If you have any questions about this Privacy Policy, please contact us through the application.</p>
+                  </section>
+                </div>
+              </div>
+              
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-slate-800">
+                <button
+                  onClick={() => setShowPrivacyModal(false)}
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg font-semibold transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // Render landing page
   if (!isLoggedIn) {
     return (
@@ -396,10 +1102,10 @@ function App() {
               </a>
               <div className="w-px h-6 bg-slate-700 mx-2"></div>
               <button 
-                onClick={handleGetStarted}
+                onClick={() => setAuthView('signin')}
                 className="ml-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg transition-all font-semibold text-sm shadow-lg shadow-blue-500/20"
               >
-                Launch App →
+                Sign In
               </button>
             </div>
             
@@ -902,11 +1608,11 @@ function App() {
                               : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'
                           }`}
                         >
-                          <div className="flex items-center space-x-2">
-                            <img src={store.icon} alt={store.label} className="w-3.5 h-3.5" />
-                            <span>{store.label}</span>
+                          <div className="flex items-center space-x-2 min-w-0 flex-1">
+                            <img src={store.icon} alt={store.label} className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="truncate text-xs">{store.label}</span>
                           </div>
-                          <span className="text-xs opacity-60">{storeOrders.length}</span>
+                          <span className="text-xs opacity-60 ml-2 flex-shrink-0">{storeOrders.length}</span>
                         </button>
                       )
                     })}
@@ -982,21 +1688,138 @@ function App() {
       <div className="flex-1 lg:ml-64 w-full">
         {/* Header Bar */}
         <header className="bg-slate-900/50 backdrop-blur-md border-b border-slate-800 p-4 sticky top-0 z-40">
-          <div className="flex justify-between items-center">
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden text-white mr-3"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            
-            <div className="flex-1">
-              <h1 className="text-lg lg:text-xl font-bold text-white capitalize">{currentView}</h1>
-              <p className="text-xs lg:text-sm text-slate-400 hidden sm:block">{CONFIG.business.tagline}</p>
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+            <div className="flex items-center w-full lg:w-auto">
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="lg:hidden text-white mr-3"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              
+              <div className="flex-1">
+                <h1 className="text-lg lg:text-xl font-bold text-white capitalize">{currentView}</h1>
+                <p className="text-xs lg:text-sm text-slate-400 hidden sm:block">{CONFIG.business.tagline}</p>
+              </div>
             </div>
+
+            {/* Global Search Bar */}
+            <div className="w-full lg:w-96 relative">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search orders, clients..."
+                  value={globalSearch}
+                  onChange={(e) => {
+                    setGlobalSearch(e.target.value)
+                    performGlobalSearch(e.target.value)
+                  }}
+                  onFocus={() => {
+                    if (globalSearch.trim().length >= 2) {
+                      performGlobalSearch(globalSearch)
+                    }
+                  }}
+                  onBlur={() => {
+                    // Delay to allow clicking on results
+                    setTimeout(() => setSearchResults(prev => ({ ...prev, visible: false })), 200)
+                  }}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                />
+                <svg className="w-5 h-5 text-slate-500 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {globalSearch && (
+                  <button
+                    onClick={() => {
+                      setGlobalSearch('')
+                      setSearchResults({ orders: [], clients: [], visible: false })
+                    }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Search Results Dropdown */}
+              {searchResults.visible && (searchResults.orders.length > 0 || searchResults.clients.length > 0) && (
+                <div className="absolute top-full mt-2 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-96 overflow-y-auto z-50">
+                  {/* Orders */}
+                  {searchResults.orders.length > 0 && (
+                    <div className="p-2">
+                      <div className="text-xs font-semibold text-slate-400 px-3 py-2">ORDERS</div>
+                      {searchResults.orders.map(order => {
+                        const client = clients.find(c => c.id === order.clientId)
+                        const status = activeConfig.statuses.find(s => s.id === order.status)
+                        return (
+                          <button
+                            key={order.id}
+                            onClick={() => {
+                              openOrderDetailModal(order)
+                              setGlobalSearch('')
+                              setSearchResults({ orders: [], clients: [], visible: false })
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-slate-800 rounded-lg transition-colors"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-white">{order.orderNumber}</div>
+                                <div className="text-xs text-slate-400">{client?.name || 'Unknown Client'}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs px-2 py-1 rounded" style={{ backgroundColor: status?.color + '20', color: status?.color }}>
+                                  {status?.label}
+                                </div>
+                                <div className="text-xs text-green-400 font-medium mt-1">
+                                  {formatMoney(order.pricing?.total || 0)}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Clients */}
+                  {searchResults.clients.length > 0 && (
+                    <div className="p-2 border-t border-slate-800">
+                      <div className="text-xs font-semibold text-slate-400 px-3 py-2">CLIENTS</div>
+                      {searchResults.clients.map(client => {
+                        const clientOrders = orders.filter(o => o.clientId === client.id)
+                        return (
+                          <button
+                            key={client.id}
+                            onClick={() => {
+                              setCurrentView('clients')
+                              setGlobalSearch('')
+                              setSearchResults({ orders: [], clients: [], visible: false })
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-slate-800 rounded-lg transition-colors"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-white">{client.name}</div>
+                                <div className="text-xs text-slate-400">{client.email || client.phone}</div>
+                              </div>
+                              <div className="text-xs text-slate-400">
+                                {clientOrders.length} order{clientOrders.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex space-x-2 lg:space-x-3">
               <button 
                 onClick={openNewClientModal}
@@ -1070,6 +1893,7 @@ function App() {
                     const dueDateStatus = getDueDateStatus(order.timeline?.dueDate)
                     const statusConfig = CONFIG.statuses.find(s => s.id === order.status)
                     const priorityConfig = CONFIG.priorities.find(p => p.id === order.priority)
+                    const storeConfig = CONFIG.stores.find(s => s.id === order.store)
                     
                     return (
                       <div 
@@ -1084,6 +1908,15 @@ function App() {
                               <Icon icon={statusConfig?.icon} className="w-5 h-5" />
                               <span className="font-semibold text-white">{client?.name || 'Unknown Client'}</span>
                               <span className="text-slate-400 text-sm font-mono">{order.orderNumber}</span>
+                              {storeConfig && storeConfig.id !== 'direct' && (
+                                <span 
+                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs font-medium"
+                                  style={{ backgroundColor: storeConfig.color + '20', color: storeConfig.color }}
+                                >
+                                  <img src={storeConfig.icon} alt={storeConfig.label} className="w-3 h-3" />
+                                  <span>{storeConfig.label}</span>
+                                </span>
+                              )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               <span 
@@ -1130,12 +1963,33 @@ function App() {
 
           {currentView === 'orders' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-white">
-                  {storeFilter === 'all' 
-                    ? 'All Orders' 
-                    : `${CONFIG.stores.find(s => s.id === storeFilter)?.label} Orders`}
-                </h2>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-2xl font-bold text-white">
+                    {storeFilter === 'all' 
+                      ? 'All Orders' 
+                      : `${CONFIG.stores.find(s => s.id === storeFilter)?.label} Orders`}
+                  </h2>
+                  {selectedOrders.length > 0 && (
+                    <span className="px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded-full">
+                      {selectedOrders.length} selected
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const filteredOrders = orders.filter(order => storeFilter === 'all' || order.store === storeFilter)
+                      exportToCSV(filteredOrders)
+                    }}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white font-medium text-sm flex items-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    <span>Export CSV</span>
+                  </button>
+                </div>
               </div>
               
               {(() => {
@@ -1180,7 +2034,84 @@ function App() {
                 }
                 
                 return (
-                  <div className="space-y-4">
+                  <div>
+                    {/* Bulk Actions Bar */}
+                    {selectedOrders.length > 0 && (
+                      <div className="mb-4 p-4 bg-blue-600/10 border border-blue-600/30 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <button
+                            onClick={() => setSelectedOrders([])}
+                            className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+                          >
+                            Clear Selection
+                          </button>
+                          <span className="text-slate-400 text-sm">
+                            {selectedOrders.length} order{selectedOrders.length !== 1 ? 's' : ''} selected
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Status Change */}
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                bulkUpdateStatus(e.target.value)
+                                e.target.value = ''
+                              }
+                            }}
+                            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="">Change Status...</option>
+                            {activeConfig.statuses.map(status => (
+                              <option key={status.id} value={status.id}>{status.label}</option>
+                            ))}
+                          </select>
+                          
+                          {/* Export Selected */}
+                          <button
+                            onClick={() => {
+                              const selectedOrdersList = orders.filter(o => selectedOrders.includes(o.id))
+                              exportToCSV(selectedOrdersList)
+                            }}
+                            className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white text-sm flex items-center space-x-1"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <span>Export</span>
+                          </button>
+                          
+                          {/* Delete */}
+                          <button
+                            onClick={bulkDelete}
+                            className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-white text-sm flex items-center space-x-1"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Select All Checkbox */}
+                    {filteredOrders.length > 0 && (
+                      <div className="mb-4 flex items-center">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedOrders.length === filteredOrders.length}
+                            onChange={() => selectAllOrders(filteredOrders)}
+                            className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                          />
+                          <span className="text-sm text-slate-400">
+                            Select all {filteredOrders.length} orders
+                          </span>
+                        </label>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-4">
                     {filteredOrders.map(order => {
                   const client = clients.find(c => c.id === order.clientId)
                   const dueDateStatus = getDueDateStatus(order.timeline?.dueDate)
@@ -1190,12 +2121,25 @@ function App() {
                   return (
                     <div 
                       key={order.id}
-                      onClick={() => openOrderDetailModal(order)}
-                      className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors cursor-pointer border-l-4"
+                      className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors border-l-4"
                       style={{ borderLeftColor: statusConfig?.color || '#64748b' }}
                     >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
+                      <div className="flex justify-between items-start gap-3">
+                        {/* Checkbox */}
+                        <div className="pt-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedOrders.includes(order.id)}
+                            onChange={(e) => {
+                              e.stopPropagation()
+                              toggleOrderSelection(order.id)
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900 cursor-pointer"
+                          />
+                        </div>
+                        
+                        <div className="flex-1 cursor-pointer" onClick={() => openOrderDetailModal(order)}>
                           <div className="flex items-center space-x-3 mb-2">
                             <Icon icon={statusConfig?.icon} className="w-5 h-5" />
                             <span className="font-semibold text-lg text-white">{client?.name || 'Unknown Client'}</span>
@@ -1226,6 +2170,7 @@ function App() {
                             )}
                           </div>
                         </div>
+                        
                         <div className="text-right ml-4">
                           <div className="text-2xl font-bold text-green-400 mb-1">
                             {formatMoney(order.pricing?.total || 0)}
@@ -1240,6 +2185,7 @@ function App() {
                     </div>
                   )
                 })}
+                    </div>
                   </div>
                 )
               })()}
@@ -1358,8 +2304,11 @@ function App() {
           {/* Kanban Board View */}
           {currentView === 'kanban' && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl lg:text-2xl font-bold text-white">Kanban Board</h2>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                  <h2 className="text-xl lg:text-2xl font-bold text-white">Kanban Board</h2>
+                  <p className="text-slate-400 text-sm mt-1">Drag orders between columns to update status</p>
+                </div>
                 <button
                   onClick={openNewOrderModal}
                   className="px-3 lg:px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium flex items-center space-x-2 text-sm lg:text-base"
@@ -1372,9 +2321,68 @@ function App() {
                 </button>
               </div>
 
+              {/* Filters */}
+              <div className="flex flex-wrap gap-3 mb-6">
+                {/* Search */}
+                <div className="flex-1 min-w-[200px]">
+                  <input
+                    type="text"
+                    placeholder="Search orders, clients..."
+                    value={kanbanFilters.search}
+                    onChange={(e) => setKanbanFilters(prev => ({ ...prev, search: e.target.value }))}
+                    className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Store Filter */}
+                <select
+                  value={kanbanFilters.store}
+                  onChange={(e) => setKanbanFilters(prev => ({ ...prev, store: e.target.value }))}
+                  className="px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="all">All Stores</option>
+                  {CONFIG.stores.map(store => (
+                    <option key={store.id} value={store.id}>{store.label}</option>
+                  ))}
+                </select>
+
+                {/* Clear Filters */}
+                {(kanbanFilters.search || kanbanFilters.store !== 'all') && (
+                  <button
+                    onClick={() => setKanbanFilters({ store: 'all', search: '' })}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 transition-colors"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto pb-4">
                 {activeConfig.statuses.map(status => {
-                  const statusOrders = orders.filter(o => o.status === status.id)
+                  // Apply filters
+                  let statusOrders = orders.filter(o => o.status === status.id)
+                  
+                  // Store filter
+                  if (kanbanFilters.store !== 'all') {
+                    statusOrders = statusOrders.filter(o => o.store === kanbanFilters.store)
+                  }
+                  
+                  // Search filter
+                  if (kanbanFilters.search) {
+                    const searchLower = kanbanFilters.search.toLowerCase()
+                    statusOrders = statusOrders.filter(o => {
+                      const client = clients.find(c => c.id === o.clientId)
+                      return (
+                        o.orderNumber?.toLowerCase().includes(searchLower) ||
+                        client?.name?.toLowerCase().includes(searchLower) ||
+                        o.items?.some(item => 
+                          item.description?.toLowerCase().includes(searchLower) ||
+                          activeConfig.productTypes.find(pt => pt.id === item.type)?.label?.toLowerCase().includes(searchLower)
+                        )
+                      )
+                    })
+                  }
+                  
                   const totalValue = statusOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
                   
                   return (
@@ -1589,6 +2597,141 @@ function App() {
                     {formatMoney(orders.length > 0 ? orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0) / orders.length : 0)}
                   </div>
                   <div className="text-purple-100 text-sm">Avg Order Value</div>
+                </div>
+              </div>
+
+              {/* Revenue Trend Chart */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-bold text-white">Revenue Trend</h3>
+                  <div className="flex space-x-2">
+                    {['7', '30', '90'].map(days => (
+                      <button
+                        key={days}
+                        onClick={() => setRevenuePeriod(days)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                          revenuePeriod === days
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                        }`}
+                      >
+                        {days}D
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="h-64">
+                  {(() => {
+                    const now = new Date()
+                    const days = parseInt(revenuePeriod)
+                    const dateMap = {}
+                    
+                    // Initialize all dates in range with 0
+                    for (let i = days - 1; i >= 0; i--) {
+                      const date = new Date(now)
+                      date.setDate(date.getDate() - i)
+                      const dateKey = date.toISOString().split('T')[0]
+                      dateMap[dateKey] = 0
+                    }
+                    
+                    // Sum revenue by date
+                    orders.forEach(order => {
+                      if (order.createdAt) {
+                        const orderDate = new Date(order.createdAt).toISOString().split('T')[0]
+                        if (dateMap.hasOwnProperty(orderDate)) {
+                          dateMap[orderDate] += order.pricing?.total || 0
+                        }
+                      }
+                    })
+                    
+                    const dataPoints = Object.entries(dateMap)
+                    const maxRevenue = Math.max(...dataPoints.map(([_, rev]) => rev), 1)
+                    
+                    return (
+                      <div className="flex items-end justify-between h-full space-x-1">
+                        {dataPoints.map(([date, revenue]) => {
+                          const height = (revenue / maxRevenue) * 100
+                          const dateObj = new Date(date)
+                          const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                          
+                          return (
+                            <div key={date} className="flex-1 flex flex-col items-center group">
+                              <div className="relative w-full flex-1 flex items-end">
+                                <div 
+                                  className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg transition-all duration-300 hover:from-blue-500 hover:to-blue-300 group-hover:shadow-lg"
+                                  style={{ height: `${height}%` }}
+                                >
+                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-slate-950 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                    {formatMoney(revenue)}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-xs text-slate-500 mt-2 rotate-45 origin-left whitespace-nowrap">
+                                {label}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* Product Performance */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-6">Top Products & Services</h3>
+                <div className="space-y-3">
+                  {(() => {
+                    const productStats = {}
+                    
+                    orders.forEach(order => {
+                      if (order.items && order.items.length > 0) {
+                        order.items.forEach(item => {
+                          if (!productStats[item.type]) {
+                            productStats[item.type] = { count: 0, revenue: 0, qty: 0 }
+                          }
+                          productStats[item.type].count++
+                          productStats[item.type].qty += item.quantity || 1
+                          productStats[item.type].revenue += item.calculatedPrice || 0
+                        })
+                      }
+                    })
+                    
+                    const sortedProducts = Object.entries(productStats)
+                      .sort((a, b) => b[1].revenue - a[1].revenue)
+                      .slice(0, 8)
+                    
+                    const maxRevenue = sortedProducts.length > 0 ? sortedProducts[0][1].revenue : 1
+                    
+                    return sortedProducts.length > 0 ? sortedProducts.map(([productType, stats]) => {
+                      const product = CONFIG.productTypes.find(p => p.id === productType)
+                      const percentage = (stats.revenue / maxRevenue) * 100
+                      
+                      return (
+                        <div key={productType}>
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center space-x-2">
+                              <Icon icon={product?.icon || 'mdi:package-variant'} className="w-4 h-4 text-blue-400" />
+                              <span className="text-white text-sm font-medium">{product?.label || productType}</span>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <span className="text-slate-400 text-xs">{stats.qty} sold</span>
+                              <span className="text-white text-sm font-bold">{formatMoney(stats.revenue)}</span>
+                            </div>
+                          </div>
+                          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-purple-600 to-blue-500 rounded-full transition-all duration-500"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    }) : (
+                      <div className="text-center text-slate-500 py-8">No product data yet</div>
+                    )
+                  })()}
                 </div>
               </div>
 
@@ -2364,6 +3507,127 @@ function App() {
                     </select>
                   </div>
                   
+                  {/* Custom Fields */}
+                  {(customConfig.selectedCustomFields || []).length > 0 && (
+                    <div className="border-t border-slate-700 pt-4">
+                      <h3 className="text-sm font-semibold text-slate-300 mb-3">📋 Custom Fields</h3>
+                      <div className="space-y-3">
+                        {(customConfig.selectedCustomFields || []).map(fieldId => {
+                          const field = CONFIG.customFields.find(f => f.id === fieldId);
+                          if (!field) return null;
+                            
+                            return (
+                              <div key={field.id}>
+                                <label className="block text-sm text-slate-400 mb-1">
+                                  {field.label} {field.required && <span className="text-red-400">*</span>}
+                                </label>
+                                
+                                {field.type === 'text' && (
+                                  <input
+                                    type="text"
+                                    value={formData.customFieldValues?.[field.id] || ''}
+                                    onChange={(e) => setFormData({
+                                      ...formData,
+                                      customFieldValues: {
+                                        ...formData.customFieldValues,
+                                        [field.id]: e.target.value
+                                      }
+                                    })}
+                                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                    placeholder={field.label}
+                                  />
+                                )}
+                                
+                                {field.type === 'number' && (
+                                  <input
+                                    type="number"
+                                    value={formData.customFieldValues?.[field.id] || ''}
+                                    onChange={(e) => setFormData({
+                                      ...formData,
+                                      customFieldValues: {
+                                        ...formData.customFieldValues,
+                                        [field.id]: e.target.value
+                                      }
+                                    })}
+                                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                    placeholder={field.label}
+                                  />
+                                )}
+                                
+                                {field.type === 'date' && (
+                                  <input
+                                    type="date"
+                                    value={formData.customFieldValues?.[field.id] || ''}
+                                    onChange={(e) => setFormData({
+                                      ...formData,
+                                      customFieldValues: {
+                                        ...formData.customFieldValues,
+                                        [field.id]: e.target.value
+                                      }
+                                    })}
+                                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                  />
+                                )}
+                                
+                                {field.type === 'dropdown' && (
+                                  <select
+                                    value={formData.customFieldValues?.[field.id] || ''}
+                                    onChange={(e) => setFormData({
+                                      ...formData,
+                                      customFieldValues: {
+                                        ...formData.customFieldValues,
+                                        [field.id]: e.target.value
+                                      }
+                                    })}
+                                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                  >
+                                    <option value="">Select {field.label}</option>
+                                    {field.options?.map(option => (
+                                      <option key={option} value={option}>{option}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                
+                                {field.type === 'textarea' && (
+                                  <textarea
+                                    value={formData.customFieldValues?.[field.id] || ''}
+                                    onChange={(e) => setFormData({
+                                      ...formData,
+                                      customFieldValues: {
+                                        ...formData.customFieldValues,
+                                        [field.id]: e.target.value
+                                      }
+                                    })}
+                                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                    placeholder={field.label}
+                                    rows={3}
+                                  />
+                                )}
+                                
+                                {field.type === 'checkbox' && (
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={formData.customFieldValues?.[field.id] || false}
+                                      onChange={(e) => setFormData({
+                                        ...formData,
+                                        customFieldValues: {
+                                          ...formData.customFieldValues,
+                                          [field.id]: e.target.checked
+                                        }
+                                      })}
+                                      className="w-4 h-4 rounded bg-slate-700 border-slate-600"
+                                    />
+                                    <span className="text-sm text-slate-300">{field.label}</span>
+                                  </label>
+                                )}
+                              </div>
+                            );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
                     <textarea
@@ -2449,7 +3713,25 @@ function App() {
                             colors: {
                               primary: CONFIG.invoice.primaryColor,
                               accent: CONFIG.invoice.accentColor
-                            }
+                            },
+                            theme: 'modern',
+                            taxRate: CONFIG.invoice.taxRate || 0,
+                            discountValue: CONFIG.invoice.discountValue || 0,
+                            discountType: CONFIG.invoice.discountType || 'percentage',
+                            paymentMethods: CONFIG.invoice.acceptedPaymentMethods || [],
+                            paymentDetails: CONFIG.invoice.paymentMethodDetails || {},
+                            paymentTerms: 'net30',
+                            dueDate: (() => {
+                              const date = new Date();
+                              date.setDate(date.getDate() + 30);
+                              return date.toISOString().split('T')[0];
+                            })(),
+                            depositPaid: selectedOrder.payments?.reduce((sum, p) => sum + p.amount, 0) || 0,
+                            enableLateFee: false,
+                            lateFeePercent: CONFIG.invoice.lateFeePercent || 5,
+                            enableProcessingFees: selectedOrder.processingFees ? true : (CONFIG.invoice.enableProcessingFees || false),
+                            selectedPaymentFee: selectedOrder.processingFees?.paymentMethod || 'none',
+                            selectedChannelFee: selectedOrder.processingFees?.salesChannel || selectedOrder.store || 'direct'
                           });
                           setShowInvoiceEditor(true);
                         } else {
@@ -2480,6 +3762,84 @@ function App() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                       </svg>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const client = clients.find(c => c.id === selectedOrder.clientId);
+                        if (client) {
+                          // Clone the invoice with all current settings
+                          const clonedInvoice = {
+                            order: {...selectedOrder, orderNumber: `${selectedOrder.orderNumber}-COPY`},
+                            client: client,
+                            customLogo: null,
+                            sections: {
+                              header: true,
+                              billTo: true,
+                              companyInfo: true,
+                              items: true,
+                              totals: true,
+                              paymentInstructions: true,
+                              thankYou: true,
+                              terms: true,
+                              footer: true
+                            },
+                            editableFields: {
+                              companyName: CONFIG.invoice.companyName,
+                              companyTagline: CONFIG.invoice.companyTagline,
+                              email: CONFIG.invoice.email,
+                              phone: CONFIG.invoice.phone,
+                              address: CONFIG.invoice.address,
+                              city: CONFIG.invoice.city,
+                              state: CONFIG.invoice.state,
+                              zip: CONFIG.invoice.zip,
+                              paymentInstructions: CONFIG.invoice.paymentInstructions,
+                              thankYouNote: CONFIG.invoice.thankYouNote,
+                              terms: CONFIG.invoice.terms,
+                              footerText: CONFIG.invoice.footerText
+                            },
+                            items: selectedOrder.items || (selectedOrder.product ? [{
+                              id: 'item_1',
+                              type: selectedOrder.product.type,
+                              description: selectedOrder.product.description,
+                              quantity: 1,
+                              price: selectedOrder.pricing?.total || 0
+                            }] : []),
+                            colors: {
+                              primary: CONFIG.invoice.primaryColor,
+                              accent: CONFIG.invoice.accentColor
+                            },
+                            theme: 'modern',
+                            taxRate: CONFIG.invoice.taxRate || 0,
+                            discountValue: CONFIG.invoice.discountValue || 0,
+                            discountType: CONFIG.invoice.discountType || 'percentage',
+                            paymentMethods: CONFIG.invoice.acceptedPaymentMethods || [],
+                            paymentDetails: CONFIG.invoice.paymentMethodDetails || {},
+                            paymentTerms: 'net30',
+                            dueDate: (() => {
+                              const date = new Date();
+                              date.setDate(date.getDate() + 30);
+                              return date.toISOString().split('T')[0];
+                            })(),
+                            depositPaid: 0,
+                            enableLateFee: false,
+                            lateFeePercent: CONFIG.invoice.lateFeePercent || 5,
+                            enableProcessingFees: selectedOrder.processingFees ? true : (CONFIG.invoice.enableProcessingFees || false),
+                            selectedPaymentFee: selectedOrder.processingFees?.paymentMethod || 'none',
+                            selectedChannelFee: selectedOrder.processingFees?.salesChannel || selectedOrder.store || 'direct'
+                          };
+                          setInvoiceData(clonedInvoice);
+                          setShowInvoiceEditor(true);
+                        } else {
+                          alert('Client information not found');
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white text-sm flex items-center space-x-1"
+                      title="Clone Invoice"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span className="hidden sm:inline">Clone</span>
                     </button>
                     <button 
                       onClick={() => setIsModalFullscreen(!isModalFullscreen)}
@@ -2731,7 +4091,7 @@ function App() {
                     <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-2">
                       {(() => {
                         const items = formData.items || selectedOrder.items || []
-                        let calculatedTotal = 0
+                        let itemsSubtotal = 0
                         
                         items.forEach(item => {
                           const itemPricing = calculateOrderPricing({
@@ -2742,9 +4102,32 @@ function App() {
                             store: formData.store || selectedOrder.store
                           })
                           const quantity = item.quantity || 1
-                          calculatedTotal += itemPricing.total * quantity
+                          itemsSubtotal += itemPricing.total * quantity
                         })
                         
+                        // Calculate fees separately
+                        const selectedPaymentMethod = formData.paymentMethod || selectedOrder.processingFees?.paymentMethod || 'none'
+                        const salesChannel = selectedOrder.processingFees?.salesChannel || selectedOrder.store || 'direct'
+                        
+                        // Payment processor fee (Venmo, PayPal, etc.)
+                        let paymentProcessorFee = 0
+                        if (selectedPaymentMethod !== 'none') {
+                          const paymentFee = CONFIG.invoice.paymentProcessorFees[selectedPaymentMethod]
+                          if (paymentFee && (paymentFee.rate > 0 || paymentFee.fixed > 0)) {
+                            paymentProcessorFee = (itemsSubtotal * (paymentFee.rate / 100)) + (paymentFee.fixed || 0)
+                          }
+                        }
+                        
+                        // Sales channel fee (Amazon, eBay, etc.)
+                        let salesChannelFee = 0
+                        const channelFeeConfig = CONFIG.invoice.salesChannelFees[salesChannel]
+                        if (channelFeeConfig && channelFeeConfig.rate > 0) {
+                          salesChannelFee = (itemsSubtotal * (channelFeeConfig.rate / 100)) + (channelFeeConfig.fixed || 0)
+                        }
+                        
+                        const totalProcessingFee = paymentProcessorFee + salesChannelFee
+                        
+                        const calculatedTotal = itemsSubtotal + totalProcessingFee
                         const paid = selectedOrder.pricing.paid
                         const newBalance = calculatedTotal - paid
                         const hasChanges = Math.abs(calculatedTotal - selectedOrder.pricing.total) > 0.01
@@ -2752,8 +4135,28 @@ function App() {
                         return (
                           <>
                             <div className="flex justify-between text-sm">
-                              <span className="text-slate-400">Total:</span>
-                              <span className="text-white font-medium">{formatMoney(calculatedTotal)}</span>
+                              <span className="text-slate-400">Subtotal:</span>
+                              <span className="text-white font-medium">{formatMoney(itemsSubtotal)}</span>
+                            </div>
+                            {paymentProcessorFee > 0 && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-slate-400">
+                                  Payment Fee ({CONFIG.paymentMethods.find(m => m.id === selectedPaymentMethod)?.label}):
+                                </span>
+                                <span className="text-orange-400 font-medium">{formatMoney(paymentProcessorFee)}</span>
+                              </div>
+                            )}
+                            {salesChannelFee > 0 && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-slate-400">
+                                  {channelFeeConfig?.label} Fee:
+                                </span>
+                                <span className="text-orange-400 font-medium">{formatMoney(salesChannelFee)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between text-sm font-bold border-t border-slate-700 pt-2">
+                              <span className="text-slate-300">Total:</span>
+                              <span className="text-white">{formatMoney(calculatedTotal)}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-slate-400">Paid:</span>
@@ -2762,8 +4165,7 @@ function App() {
                             <div className="flex justify-between text-sm pt-2 border-t border-slate-700">
                               <span className="text-slate-400">Balance:</span>
                               <span className={`font-bold ${newBalance > 0 ? 'text-amber-400' : 'text-green-400'}`}>
-                                {formatMoney(newBalance)}
-                              </span>
+                                {formatMoney(newBalance)}</span>
                             </div>
                             {hasChanges && (
                               <div className="text-xs text-amber-400 pt-2 border-t border-slate-700">
@@ -2774,6 +4176,97 @@ function App() {
                         )
                       })()}
                     </div>
+                  </div>
+
+                  {/* Time Tracker */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Time Tracker</span>
+                    </h3>
+                    
+                    {activeTimers[selectedOrder.id] ? (
+                      <div className="bg-green-900/20 border border-green-700/30 rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs text-slate-400 mb-1">Timer Running</div>
+                            <div className="text-2xl font-mono font-bold text-green-400">
+                              {formatDuration(currentTime - activeTimers[selectedOrder.id].startTime)}
+                            </div>
+                          </div>
+                          <div className="animate-pulse">
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                          </div>
+                        </div>
+                        <input
+                          type="text"
+                          value={activeTimers[selectedOrder.id].description}
+                          onChange={(e) => updateTimerDescription(selectedOrder.id, e.target.value)}
+                          placeholder="What are you working on?"
+                          className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm"
+                        />
+                        <button
+                          onClick={() => stopTimer(selectedOrder.id)}
+                          className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-white text-sm flex items-center justify-center space-x-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                          </svg>
+                          <span>Stop Timer</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startTimer(selectedOrder.id)}
+                        className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white text-sm flex items-center justify-center space-x-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Start Timer</span>
+                      </button>
+                    )}
+
+                    {/* Time Entries History */}
+                    {selectedOrder.timeEntries && selectedOrder.timeEntries.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <div className="flex justify-between items-center text-xs text-slate-400 mb-2">
+                          <span>Time Entries</span>
+                          <span className="font-semibold text-blue-400">
+                            Total: {formatDuration(getTotalTrackedTime(selectedOrder))}
+                          </span>
+                        </div>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {selectedOrder.timeEntries.slice().reverse().map(entry => (
+                            <div key={entry.id} className="bg-slate-800/50 rounded p-2 border border-slate-700 text-xs">
+                              <div className="flex justify-between items-start mb-1">
+                                <span className="text-slate-300 font-medium">{entry.description}</span>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Delete this time entry?')) {
+                                      deleteTimeEntry(selectedOrder.id, entry.id)
+                                    }
+                                  }}
+                                  className="text-slate-500 hover:text-red-400 transition-colors"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                              <div className="flex justify-between text-slate-500">
+                                <span>{new Date(entry.startTime).toLocaleString()}</span>
+                                <span className="font-mono text-green-400">{formatDuration(entry.duration)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Payment History */}
@@ -3167,6 +4660,16 @@ function App() {
                 }`}
               >
                 🧾 Invoice
+              </button>
+              <button
+                onClick={() => setFormData({...formData, settingsTab: 'fields'})}
+                className={`px-4 py-3 font-medium transition-colors border-b-2 ${
+                  formData.settingsTab === 'fields'
+                    ? 'border-blue-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                📝 Custom Fields
               </button>
             </div>
             
@@ -3782,6 +5285,145 @@ function App() {
               </div>
               )}
 
+              {/* Custom Fields Tab */}
+              {formData.settingsTab === 'fields' && (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Custom Fields</h3>
+                <p className="text-sm text-slate-400 mb-6">Build your own custom fields that fit your business perfectly. Select the fields you need and they'll automatically appear when creating new orders.</p>
+                
+                {/* Individual Field Selection */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-slate-300">Available Fields</h4>
+                    <button
+                      onClick={() => saveCustomConfig({ selectedCustomFields: [] })}
+                      className="text-xs text-slate-400 hover:text-white transition-colors"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  
+                  {/* Group fields by category with sections */}
+                  {[
+                    { 
+                      key: 'project', 
+                      label: 'Project Information',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    },
+                    { 
+                      key: 'location', 
+                      label: 'Location & Site',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    },
+                    { 
+                      key: 'personnel', 
+                      label: 'Personnel & Assignments',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    },
+                    { 
+                        key: 'time', 
+                      label: 'Time Tracking',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    },
+                    { 
+                      key: 'costs', 
+                      label: 'Costs & Materials',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    },
+                    { 
+                      key: 'compliance', 
+                      label: 'Compliance & Permits',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                    },
+                    { 
+                      key: 'creative', 
+                      label: 'Creative & Deliverables',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
+                    },
+                    { 
+                      key: 'warranty', 
+                      label: 'Warranty & Terms',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    },
+                    { 
+                      key: 'reference', 
+                      label: 'Reference & Tracking',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+                    },
+                    { 
+                      key: 'notes', 
+                      label: 'Notes & Details',
+                      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    }
+                  ].map(section => {
+                    const sectionFields = CONFIG.customFields.filter(f => f.category === section.key);
+                    if (sectionFields.length === 0) return null;
+                    
+                    return (
+                      <div key={section.key} className="mb-6">
+                        <h5 className="text-sm font-semibold text-slate-300 mb-3 flex items-center space-x-2">
+                          {section.icon}
+                          <span>{section.label}</span>
+                        </h5>
+                        <div className="space-y-2">
+                          {sectionFields.map(field => {
+                            const isSelected = (customConfig.selectedCustomFields || []).includes(field.id);
+                            return (
+                              <label
+                                key={field.id}
+                                className="flex items-center justify-between p-3 bg-slate-800 hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      const current = customConfig.selectedCustomFields || [];
+                                      const updated = e.target.checked
+                                        ? [...current, field.id]
+                                        : current.filter(id => id !== field.id);
+                                      saveCustomConfig({ selectedCustomFields: updated });
+                                    }}
+                                    className="w-4 h-4 bg-slate-700 border-slate-600 rounded"
+                                  />
+                                  <div>
+                                    <div className="text-sm text-white">{field.label}</div>
+                                    {field.options && (
+                                      <div className="text-xs text-slate-500 mt-0.5">
+                                        Options: {field.options.join(', ')}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <span className="text-xs text-slate-500">{field.type}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Summary */}
+                {(customConfig.selectedCustomFields || []).length > 0 && (
+                  <div className="p-4 bg-green-900/20 border border-green-700/30 rounded-lg">
+                    <p className="text-sm text-green-300">
+                      ✓ {(customConfig.selectedCustomFields || []).length} custom field{(customConfig.selectedCustomFields || []).length !== 1 ? 's' : ''} selected. These will appear on all new orders.
+                    </p>
+                  </div>
+                )}
+                
+                {(customConfig.selectedCustomFields || []).length === 0 && (
+                  <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                    <p className="text-sm text-slate-400">
+                      💡 No custom fields selected. Select fields above or use a quick start template.
+                    </p>
+                  </div>
+                )}
+              </div>
+              )}
+
               {/* Data Management Section */}
               <div className="border-t border-slate-800 pt-6">
                 <h3 className="text-lg font-semibold text-white mb-3">Data Management</h3>
@@ -3852,7 +5494,7 @@ function App() {
                       ...invoiceData.order,
                       items: invoiceData.items
                     };
-                    const result = await generateInvoicePDF(customOrder, invoiceData.client);
+                    const result = await generateInvoicePDF(customOrder, invoiceData.client, null, invoiceData);
                     if (result.success) {
                       alert(`Invoice ${result.fileName} downloaded successfully!`);
                     } else {
@@ -4049,6 +5691,519 @@ function App() {
                   </div>
                 </div>
 
+                {/* Invoice Theme */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Invoice Theme</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['modern', 'classic', 'minimal', 'bold', 'creative'].map(theme => (
+                      <button
+                        key={theme}
+                        onClick={() => setInvoiceData({...invoiceData, theme})}
+                        className={`p-3 rounded-lg border-2 transition-all ${
+                          (invoiceData.theme || 'modern') === theme
+                            ? 'border-blue-500 bg-blue-500/20'
+                            : 'border-slate-700 bg-slate-800 hover:border-slate-600'
+                        }`}
+                      >
+                        <span className="text-sm text-white font-medium capitalize">{theme}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">
+                    {(invoiceData.theme || 'modern') === 'modern' && 'Clean gradients with bold headers'}
+                    {invoiceData.theme === 'classic' && 'Traditional business invoice layout'}
+                    {invoiceData.theme === 'minimal' && 'Simple lines, maximum clarity'}
+                    {invoiceData.theme === 'bold' && 'High contrast, statement design'}
+                    {invoiceData.theme === 'creative' && 'Artistic layout for creative professionals'}
+                  </p>
+                </div>
+
+                {/* Tax & Discount */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Tax Rate (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={invoiceData.taxRate || 0}
+                      onChange={(e) => setInvoiceData({
+                        ...invoiceData,
+                        taxRate: parseFloat(e.target.value) || 0
+                      })}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Discount</label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={invoiceData.discountValue || 0}
+                        onChange={(e) => setInvoiceData({
+                          ...invoiceData,
+                          discountValue: parseFloat(e.target.value) || 0
+                        })}
+                        className="flex-1 p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      />
+                      <select
+                        value={invoiceData.discountType || 'percentage'}
+                        onChange={(e) => setInvoiceData({
+                          ...invoiceData,
+                          discountType: e.target.value
+                        })}
+                        className="p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="percentage">%</option>
+                        <option value="flat">$</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Due Date & Payment Terms */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Payment Terms</label>
+                    <select
+                      value={invoiceData.paymentTerms || 'net30'}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        let dueDate = new Date();
+                        if (value === 'net30') dueDate.setDate(dueDate.getDate() + 30);
+                        else if (value === 'net60') dueDate.setDate(dueDate.getDate() + 60);
+                        else if (value === 'net90') dueDate.setDate(dueDate.getDate() + 90);
+                        else if (value === 'due_on_receipt') dueDate = new Date();
+                        
+                        setInvoiceData({
+                          ...invoiceData,
+                          paymentTerms: value,
+                          dueDate: dueDate.toISOString().split('T')[0]
+                        });
+                      }}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="due_on_receipt">Due on Receipt</option>
+                      <option value="net30">Net 30</option>
+                      <option value="net60">Net 60</option>
+                      <option value="net90">Net 90</option>
+                      <option value="custom">Custom Date</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Due Date</label>
+                    <input
+                      type="date"
+                      value={invoiceData.dueDate || new Date().toISOString().split('T')[0]}
+                      onChange={(e) => setInvoiceData({
+                        ...invoiceData,
+                        dueDate: e.target.value,
+                        paymentTerms: 'custom'
+                      })}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Deposit & Balance Tracking */}
+                <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                  <h4 className="text-sm font-medium text-slate-300 mb-3">Payment Tracking</h4>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Deposit/Amount Paid</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={invoiceData.depositPaid || 0}
+                        onChange={(e) => setInvoiceData({
+                          ...invoiceData,
+                          depositPaid: parseFloat(e.target.value) || 0
+                        })}
+                        className="w-full p-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Balance Due</label>
+                      <div className="p-2 bg-slate-900 border border-slate-600 rounded text-white text-sm font-semibold">
+                        ${(() => {
+                          const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                          const discount = invoiceData.discountValue > 0 
+                            ? (invoiceData.discountType === 'percentage' 
+                              ? (subtotal * invoiceData.discountValue / 100)
+                              : invoiceData.discountValue)
+                            : 0;
+                          const afterDiscount = subtotal - discount;
+                          const tax = invoiceData.taxRate > 0 ? (afterDiscount * (invoiceData.taxRate / 100)) : 0;
+                          const total = afterDiscount + tax;
+                          const balance = total - (invoiceData.depositPaid || 0);
+                          return Math.max(0, balance).toFixed(2);
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Late Fee Calculation */}
+                  {(() => {
+                    const dueDate = new Date(invoiceData.dueDate || new Date());
+                    const today = new Date();
+                    const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+                    
+                    if (daysOverdue > 0 && invoiceData.enableLateFee) {
+                      const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                      const lateFee = subtotal * ((invoiceData.lateFeePercent || 5) / 100);
+                      return (
+                        <div className="bg-red-900/20 border border-red-700 rounded p-2 text-xs">
+                          <span className="text-red-400 font-semibold">⚠️ {daysOverdue} days overdue</span>
+                          <span className="text-slate-400"> - Late fee: ${lateFee.toFixed(2)} ({invoiceData.lateFeePercent || 5}%)</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  <label className="flex items-center space-x-2 cursor-pointer mt-2">
+                    <input
+                      type="checkbox"
+                      checked={invoiceData.enableLateFee || false}
+                      onChange={(e) => setInvoiceData({
+                        ...invoiceData,
+                        enableLateFee: e.target.checked
+                      })}
+                      className="w-4 h-4 rounded bg-slate-700 border-slate-600"
+                    />
+                    <span className="text-xs text-slate-300">Enable late fee ({invoiceData.lateFeePercent || 5}% after due date)</span>
+                  </label>
+                </div>
+
+                {/* Payment Methods */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Accepted Payment Methods</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['venmo', 'paypal', 'zelle', 'card', 'check', 'wire'].map(method => (
+                      <label key={method} className="flex items-center space-x-2 cursor-pointer bg-slate-800 p-2 rounded border border-slate-700 hover:border-blue-500">
+                        <input
+                          type="checkbox"
+                          checked={invoiceData.paymentMethods?.includes(method)}
+                          onChange={(e) => {
+                            const methods = invoiceData.paymentMethods || [];
+                            const newMethods = e.target.checked 
+                              ? [...methods, method]
+                              : methods.filter(m => m !== method);
+                            setInvoiceData({...invoiceData, paymentMethods: newMethods});
+                          }}
+                          className="w-4 h-4 rounded bg-slate-700 border-slate-600"
+                        />
+                        <span className="text-sm text-slate-300 capitalize">{method === 'card' ? 'Credit Card' : method === 'wire' ? 'Wire Transfer' : method}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment Method Details */}
+                {invoiceData.paymentMethods?.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Payment Details</label>
+                    <div className="space-y-2">
+                      {invoiceData.paymentMethods.map(method => (
+                        <div key={method}>
+                          <label className="block text-xs text-slate-400 mb-1 capitalize">
+                            {method === 'card' ? 'Credit Card' : method === 'wire' ? 'Wire Transfer' : method}
+                          </label>
+                          <input
+                            type="text"
+                            value={invoiceData.paymentDetails?.[method] || ''}
+                            onChange={(e) => setInvoiceData({
+                              ...invoiceData,
+                              paymentDetails: {
+                                ...invoiceData.paymentDetails,
+                                [method]: e.target.value
+                              }
+                            })}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                            placeholder={`Enter ${method} details...`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Processing Fees */}
+                <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-slate-300">Processing Fees</h4>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={invoiceData.enableProcessingFees || false}
+                        onChange={(e) => setInvoiceData({
+                          ...invoiceData,
+                          enableProcessingFees: e.target.checked
+                        })}
+                        className="w-4 h-4 rounded bg-slate-700 border-slate-600"
+                      />
+                      <span className="text-xs text-slate-300">Pass fees to customer</span>
+                    </label>
+                  </div>
+                  
+                  {invoiceData.enableProcessingFees && (
+                    <div className="space-y-3">
+                      {/* Selected Payment Method Fee */}
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Payment Method</label>
+                        <select
+                          value={invoiceData.selectedPaymentFee || 'none'}
+                          onChange={(e) => setInvoiceData({
+                            ...invoiceData,
+                            selectedPaymentFee: e.target.value
+                          })}
+                          className="w-full p-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                          <option value="none">No Payment Fee</option>
+                          {Object.entries(CONFIG.invoice.paymentProcessorFees).map(([key, fee]) => (
+                            <option key={key} value={key}>
+                              {fee.label} ({fee.rate}%{fee.fixed > 0 ? ` + $${fee.fixed}` : ''})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {/* Sales Channel Fee */}
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Sales Channel</label>
+                        <select
+                          value={invoiceData.selectedChannelFee || invoiceData.order.store || 'direct'}
+                          onChange={(e) => setInvoiceData({
+                            ...invoiceData,
+                            selectedChannelFee: e.target.value
+                          })}
+                          className="w-full p-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                          {Object.entries(CONFIG.invoice.salesChannelFees).map(([key, fee]) => (
+                            <option key={key} value={key}>
+                              {fee.label} {fee.rate > 0 ? `(${fee.rate}%${fee.fixed ? ` + $${fee.fixed}` : ''})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {/* Fee Preview */}
+                      <div className="bg-slate-900 p-3 rounded-lg border border-blue-500/30">
+                        <p className="text-slate-400 text-xs mb-2">Customer pays processing fees so you receive full amount:</p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-400">Fee Rate:</span>
+                            <span className="text-blue-400 font-mono">{(() => {
+                              const paymentFee = CONFIG.invoice.paymentProcessorFees[invoiceData.selectedPaymentFee || 'none'];
+                              const channelFee = CONFIG.invoice.salesChannelFees[invoiceData.selectedChannelFee || 'direct'];
+                              
+                              let totalFeeRate = 0;
+                              let totalFixedFee = 0;
+                              
+                              if (paymentFee && invoiceData.selectedPaymentFee !== 'none') {
+                                totalFeeRate += paymentFee.rate;
+                                totalFixedFee += paymentFee.fixed || 0;
+                              }
+                              if (channelFee) {
+                                totalFeeRate += channelFee.rate || 0;
+                                totalFixedFee += channelFee.fixed || 0;
+                              }
+                              
+                              return `${totalFeeRate}% ${totalFixedFee > 0 ? `+ $${totalFixedFee.toFixed(2)}` : ''}`;
+                            })()}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-400">Processing Fee:</span>
+                            <span className="text-orange-400 font-bold">${(() => {
+                              const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                              const paymentFee = CONFIG.invoice.paymentProcessorFees[invoiceData.selectedPaymentFee || 'none'];
+                              const channelFee = CONFIG.invoice.salesChannelFees[invoiceData.selectedChannelFee || 'direct'];
+                              
+                              let totalFeeRate = 0;
+                              let totalFixedFee = 0;
+                              
+                              if (paymentFee && invoiceData.selectedPaymentFee !== 'none') {
+                                totalFeeRate += paymentFee.rate;
+                                totalFixedFee += paymentFee.fixed || 0;
+                              }
+                              if (channelFee) {
+                                totalFeeRate += channelFee.rate || 0;
+                                totalFixedFee += channelFee.fixed || 0;
+                              }
+                              
+                              const feeAmount = (subtotal * (totalFeeRate / 100)) + totalFixedFee;
+                              return feeAmount.toFixed(2);
+                            })()}</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t border-slate-700">
+                            <span className="text-white font-bold">Customer Pays:</span>
+                            <span className="text-green-400 font-bold text-lg">${(() => {
+                              const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                              const paymentFee = CONFIG.invoice.paymentProcessorFees[invoiceData.selectedPaymentFee || 'none'];
+                              const channelFee = CONFIG.invoice.salesChannelFees[invoiceData.selectedChannelFee || 'direct'];
+                              
+                              let totalFeeRate = 0;
+                              let totalFixedFee = 0;
+                              
+                              if (paymentFee && invoiceData.selectedPaymentFee !== 'none') {
+                                totalFeeRate += paymentFee.rate;
+                                totalFixedFee += paymentFee.fixed || 0;
+                              }
+                              if (channelFee) {
+                                totalFeeRate += channelFee.rate || 0;
+                                totalFixedFee += channelFee.fixed || 0;
+                              }
+                              
+                              const discount = invoiceData.discountValue > 0 
+                                ? (invoiceData.discountType === 'percentage' 
+                                  ? (subtotal * invoiceData.discountValue / 100)
+                                  : invoiceData.discountValue)
+                                : 0;
+                              const afterDiscount = subtotal - discount;
+                              const tax = invoiceData.taxRate > 0 ? (afterDiscount * (invoiceData.taxRate / 100)) : 0;
+                              const feeAmount = (subtotal * (totalFeeRate / 100)) + totalFixedFee;
+                              const total = afterDiscount + tax + feeAmount;
+                              return total.toFixed(2);
+                            })()}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Custom Fields */}
+                {invoiceData.selectedFieldTemplate && invoiceData.customFieldValues && Object.keys(invoiceData.customFieldValues).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-slate-300 mb-2">Custom Fields</h4>
+                  
+                  {/* Active Fields */}
+                  {invoiceData.selectedFieldTemplate && (() => {
+                    const template = CONFIG.fieldTemplates.find(t => t.id === invoiceData.selectedFieldTemplate);
+                    if (!template) return null;
+                    
+                    return (
+                      <div className="space-y-2 bg-slate-900 p-3 rounded-lg border border-slate-700">
+                        <div className="flex items-center space-x-2 mb-2 pb-2 border-b border-slate-700">
+                          <span className="text-lg">{template.icon}</span>
+                          <span className="text-xs font-medium text-slate-300">{template.name}</span>
+                        </div>
+                        {template.fields.map(fieldId => {
+                          const field = CONFIG.customFields.find(f => f.id === fieldId);
+                          if (!field) return null;
+                          
+                          return (
+                            <div key={field.id}>
+                              <label className="block text-xs text-slate-400 mb-1">
+                                {field.label} {field.required && <span className="text-red-400">*</span>}
+                              </label>
+                              
+                              {field.type === 'text' && (
+                                <input
+                                  type="text"
+                                  value={invoiceData.customFieldValues?.[field.id] || ''}
+                                  onChange={(e) => setInvoiceData({
+                                    ...invoiceData,
+                                    customFieldValues: {
+                                      ...invoiceData.customFieldValues,
+                                      [field.id]: e.target.value
+                                    }
+                                  })}
+                                  className="w-full p-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                  placeholder={field.label}
+                                />
+                              )}
+                              
+                              {field.type === 'number' && (
+                                <input
+                                  type="number"
+                                  value={invoiceData.customFieldValues?.[field.id] || ''}
+                                  onChange={(e) => setInvoiceData({
+                                    ...invoiceData,
+                                    customFieldValues: {
+                                      ...invoiceData.customFieldValues,
+                                      [field.id]: e.target.value
+                                    }
+                                  })}
+                                  className="w-full p-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                  placeholder={field.label}
+                                />
+                              )}
+                              
+                              {field.type === 'date' && (
+                                <input
+                                  type="date"
+                                  value={invoiceData.customFieldValues?.[field.id] || ''}
+                                  onChange={(e) => setInvoiceData({
+                                    ...invoiceData,
+                                    customFieldValues: {
+                                      ...invoiceData.customFieldValues,
+                                      [field.id]: e.target.value
+                                    }
+                                  })}
+                                  className="w-full p-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                />
+                              )}
+                              
+                              {field.type === 'dropdown' && (
+                                <select
+                                  value={invoiceData.customFieldValues?.[field.id] || ''}
+                                  onChange={(e) => setInvoiceData({
+                                    ...invoiceData,
+                                    customFieldValues: {
+                                      ...invoiceData.customFieldValues,
+                                      [field.id]: e.target.value
+                                    }
+                                  })}
+                                  className="w-full p-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                >
+                                  <option value="">Select {field.label}</option>
+                                  {field.options?.map(option => (
+                                    <option key={option} value={option}>{option}</option>
+                                  ))}
+                                </select>
+                              )}
+                              
+                              {field.type === 'textarea' && (
+                                <textarea
+                                  value={invoiceData.customFieldValues?.[field.id] || ''}
+                                  onChange={(e) => setInvoiceData({
+                                    ...invoiceData,
+                                    customFieldValues: {
+                                      ...invoiceData.customFieldValues,
+                                      [field.id]: e.target.value
+                                    }
+                                  })}
+                                  className="w-full p-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                  placeholder={field.label}
+                                  rows={3}
+                                />
+                              )}
+                              
+                              {field.type === 'checkbox' && (
+                                <label className="flex items-center space-x-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={invoiceData.customFieldValues?.[field.id] || false}
+                                    onChange={(e) => setInvoiceData({
+                                      ...invoiceData,
+                                      customFieldValues: {
+                                        ...invoiceData.customFieldValues,
+                                        [field.id]: e.target.checked
+                                      }
+                                    })}
+                                    className="w-4 h-4 rounded bg-slate-700 border-slate-600"
+                                  />
+                                  <span className="text-sm text-slate-300">{field.label}</span>
+                                </label>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+                )}
+
                 {/* Line Items */}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Invoice Items</label>
@@ -4192,28 +6347,119 @@ function App() {
                   {/* Live Preview Content */}
                   <div>
                     {/* Header */}
-                    {invoiceData.sections.header && (
-                      <div 
-                        className="p-8 rounded-lg mb-8 text-white"
-                        style={{
-                          background: `linear-gradient(135deg, ${invoiceData.colors.primary} 0%, ${invoiceData.colors.accent} 100%)`
-                        }}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            {invoiceData.customLogo && (
-                              <img src={invoiceData.customLogo} alt="Logo" className="h-16 mb-3 object-contain" />
-                            )}
-                            <h1 className="text-3xl font-bold">{invoiceData.editableFields.companyName}</h1>
-                            <p className="opacity-90 mt-1">{invoiceData.editableFields.companyTagline}</p>
+                    {invoiceData.sections.header && (() => {
+                      const theme = invoiceData.theme || 'modern';
+                      
+                      // Modern Theme (gradient)
+                      if (theme === 'modern') {
+                        return (
+                          <div 
+                            className="p-8 rounded-lg mb-8 text-white"
+                            style={{
+                              background: `linear-gradient(135deg, ${invoiceData.colors.primary} 0%, ${invoiceData.colors.accent} 100%)`
+                            }}
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                {invoiceData.customLogo && (
+                                  <img src={invoiceData.customLogo} alt="Logo" className="h-16 mb-3 object-contain" />
+                                )}
+                                <h1 className="text-3xl font-bold">{invoiceData.editableFields.companyName}</h1>
+                                <p className="opacity-90 mt-1">{invoiceData.editableFields.companyTagline}</p>
+                              </div>
+                              <div className="text-right">
+                                <h2 className="text-2xl font-bold">INVOICE</h2>
+                                <p className="opacity-90 text-lg">#{invoiceData.order.orderNumber}</p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <h2 className="text-2xl font-bold">INVOICE</h2>
-                            <p className="opacity-90 text-lg">#{invoiceData.order.orderNumber}</p>
+                        );
+                      }
+                      
+                      // Classic Theme (border-based)
+                      if (theme === 'classic') {
+                        return (
+                          <div className="border-4 p-6 mb-8" style={{borderColor: invoiceData.colors.primary}}>
+                            <div className="flex justify-between items-center">
+                              <div>
+                                {invoiceData.customLogo && (
+                                  <img src={invoiceData.customLogo} alt="Logo" className="h-14 mb-2 object-contain" />
+                                )}
+                                <h1 className="text-2xl font-bold" style={{color: invoiceData.colors.primary}}>{invoiceData.editableFields.companyName}</h1>
+                                <p className="text-gray-600 text-sm">{invoiceData.editableFields.companyTagline}</p>
+                              </div>
+                              <div className="text-right border-l-4 pl-6" style={{borderColor: invoiceData.colors.accent}}>
+                                <h2 className="text-xl font-bold text-gray-800">INVOICE</h2>
+                                <p className="text-gray-600">#{invoiceData.order.orderNumber}</p>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    )}
+                        );
+                      }
+                      
+                      // Minimal Theme (clean, simple)
+                      if (theme === 'minimal') {
+                        return (
+                          <div className="mb-10">
+                            <div className="flex justify-between items-start border-b-2 pb-6" style={{borderColor: invoiceData.colors.primary}}>
+                              <div>
+                                {invoiceData.customLogo && (
+                                  <img src={invoiceData.customLogo} alt="Logo" className="h-12 mb-4 object-contain" />
+                                )}
+                                <h1 className="text-4xl font-light text-gray-800">{invoiceData.editableFields.companyName}</h1>
+                              </div>
+                              <div className="text-right">
+                                <h2 className="text-sm uppercase tracking-wider text-gray-500 mb-1">Invoice</h2>
+                                <p className="text-2xl font-light text-gray-800">#{invoiceData.order.orderNumber}</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // Bold Theme (high contrast)
+                      if (theme === 'bold') {
+                        return (
+                          <div className="mb-8">
+                            <div className="p-8 text-white mb-4" style={{backgroundColor: invoiceData.colors.primary}}>
+                              {invoiceData.customLogo && (
+                                <img src={invoiceData.customLogo} alt="Logo" className="h-14 mb-3 object-contain filter brightness-0 invert" />
+                              )}
+                              <h1 className="text-5xl font-black uppercase tracking-tight">{invoiceData.editableFields.companyName}</h1>
+                            </div>
+                            <div className="flex justify-between items-center px-2">
+                              <p className="text-lg text-gray-600">{invoiceData.editableFields.companyTagline}</p>
+                              <div className="text-right">
+                                <span className="text-sm uppercase tracking-wider text-gray-500">Invoice #</span>
+                                <p className="text-3xl font-black" style={{color: invoiceData.colors.accent}}>{invoiceData.order.orderNumber}</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // Creative Theme (artistic, asymmetric)
+                      if (theme === 'creative') {
+                        return (
+                          <div className="mb-10 relative">
+                            <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10" style={{background: invoiceData.colors.accent}}></div>
+                            <div className="relative">
+                              {invoiceData.customLogo && (
+                                <img src={invoiceData.customLogo} alt="Logo" className="h-16 mb-4 object-contain" />
+                              )}
+                              <div className="flex items-baseline space-x-4 mb-2">
+                                <h1 className="text-5xl font-bold" style={{color: invoiceData.colors.primary}}>{invoiceData.editableFields.companyName}</h1>
+                                <span className="text-6xl font-light" style={{color: invoiceData.colors.accent}}>.</span>
+                              </div>
+                              <p className="text-gray-600 italic mb-6">{invoiceData.editableFields.companyTagline}</p>
+                              <div className="inline-block px-4 py-2 rounded-full" style={{backgroundColor: `${invoiceData.colors.primary}20`}}>
+                                <span className="text-sm uppercase tracking-wider" style={{color: invoiceData.colors.primary}}>Invoice #{invoiceData.order.orderNumber}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                    })()}
 
                     {/* Bill To & Company Info */}
                     <div className="flex justify-between mb-8">
@@ -4223,6 +6469,19 @@ function App() {
                           <p className="font-semibold text-lg">{invoiceData.client.name}</p>
                           <p className="text-gray-600 text-sm">{invoiceData.client.email}</p>
                           {invoiceData.client.phone && <p className="text-gray-600 text-sm">{invoiceData.client.phone}</p>}
+                          
+                          {/* Invoice Date & Due Date */}
+                          <div className="mt-4 pt-3 border-t border-gray-200">
+                            <div className="text-xs text-gray-500">
+                              <p><strong>Invoice Date:</strong> {new Date().toLocaleDateString()}</p>
+                              {invoiceData.dueDate && (
+                                <p><strong>Due Date:</strong> {new Date(invoiceData.dueDate).toLocaleDateString()}</p>
+                              )}
+                              {invoiceData.paymentTerms && invoiceData.paymentTerms !== 'custom' && (
+                                <p><strong>Terms:</strong> {invoiceData.paymentTerms.replace('_', ' ').toUpperCase()}</p>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       )}
                       {invoiceData.sections.companyInfo && (
@@ -4267,12 +6526,219 @@ function App() {
                         <div className="w-80">
                           <div className="flex justify-between py-2 border-b border-gray-200">
                             <span className="text-gray-600">Subtotal:</span>
-                            <span className="font-semibold">${invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}</span>
+                            <span className="font-semibold">${(() => {
+                              const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                              return subtotal.toFixed(2);
+                            })()}</span>
                           </div>
+                          
+                          {/* Discount */}
+                          {invoiceData.discountValue > 0 && (
+                            <div className="flex justify-between py-2 border-b border-gray-200 text-green-600">
+                              <span>Discount {invoiceData.discountType === 'percentage' ? `(${invoiceData.discountValue}%)` : ''}:</span>
+                              <span>-${(() => {
+                                const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                                const discount = invoiceData.discountType === 'percentage' 
+                                  ? (subtotal * invoiceData.discountValue / 100)
+                                  : invoiceData.discountValue;
+                                return discount.toFixed(2);
+                              })()}</span>
+                            </div>
+                          )}
+                          
+                          {/* Tax */}
+                          {invoiceData.taxRate > 0 && (
+                            <div className="flex justify-between py-2 border-b border-gray-200">
+                              <span className="text-gray-600">Tax ({invoiceData.taxRate}%):</span>
+                              <span className="font-semibold">${(() => {
+                                const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                                const discount = invoiceData.discountValue > 0 
+                                  ? (invoiceData.discountType === 'percentage' 
+                                    ? (subtotal * invoiceData.discountValue / 100)
+                                    : invoiceData.discountValue)
+                                  : 0;
+                                const afterDiscount = subtotal - discount;
+                                const tax = afterDiscount * (invoiceData.taxRate / 100);
+                                return tax.toFixed(2);
+                              })()}</span>
+                            </div>
+                          )}
+                          
+                          {/* Processing Fees */}
+                          {invoiceData.enableProcessingFees && (invoiceData.selectedPaymentFee !== 'none' || invoiceData.selectedChannelFee !== 'direct') && (
+                            <div className="flex justify-between py-2 border-b border-gray-200 text-orange-600">
+                              <span className="flex items-center">
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Processing Fee:
+                              </span>
+                              <span className="font-semibold">${(() => {
+                                const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                                const paymentFee = CONFIG.invoice.paymentProcessorFees[invoiceData.selectedPaymentFee || 'none'];
+                                const channelFee = CONFIG.invoice.salesChannelFees[invoiceData.selectedChannelFee || 'direct'];
+                                
+                                let totalFeeRate = 0;
+                                let totalFixedFee = 0;
+                                
+                                if (paymentFee && invoiceData.selectedPaymentFee !== 'none') {
+                                  totalFeeRate += paymentFee.rate;
+                                  totalFixedFee += paymentFee.fixed || 0;
+                                }
+                                if (channelFee) {
+                                  totalFeeRate += channelFee.rate || 0;
+                                  totalFixedFee += channelFee.fixed || 0;
+                                }
+                                
+                                const feeAmount = (subtotal * (totalFeeRate / 100)) + totalFixedFee;
+                                return feeAmount.toFixed(2);
+                              })()}</span>
+                            </div>
+                          )}
+                          
                           <div className="flex justify-between py-3 border-b-2" style={{borderColor: invoiceData.colors.primary}}>
                             <span className="text-lg font-bold">Total:</span>
-                            <span className="text-lg font-bold" style={{color: invoiceData.colors.primary}}>${invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}</span>
+                            <span className="text-lg font-bold" style={{color: invoiceData.colors.primary}}>${(() => {
+                              const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                              const discount = invoiceData.discountValue > 0 
+                                ? (invoiceData.discountType === 'percentage' 
+                                  ? (subtotal * invoiceData.discountValue / 100)
+                                  : invoiceData.discountValue)
+                                : 0;
+                              const afterDiscount = subtotal - discount;
+                              const tax = invoiceData.taxRate > 0 ? (afterDiscount * (invoiceData.taxRate / 100)) : 0;
+                              
+                              // Add processing fees if enabled
+                              let processingFee = 0;
+                              if (invoiceData.enableProcessingFees) {
+                                const paymentFee = CONFIG.invoice.paymentProcessorFees[invoiceData.selectedPaymentFee || 'none'];
+                                const channelFee = CONFIG.invoice.salesChannelFees[invoiceData.selectedChannelFee || 'direct'];
+                                
+                                let totalFeeRate = 0;
+                                let totalFixedFee = 0;
+                                
+                                if (paymentFee && invoiceData.selectedPaymentFee !== 'none') {
+                                  totalFeeRate += paymentFee.rate;
+                                  totalFixedFee += paymentFee.fixed || 0;
+                                }
+                                if (channelFee) {
+                                  totalFeeRate += channelFee.rate || 0;
+                                  totalFixedFee += channelFee.fixed || 0;
+                                }
+                                
+                                processingFee = (subtotal * (totalFeeRate / 100)) + totalFixedFee;
+                              }
+                              
+                              const total = afterDiscount + tax + processingFee;
+                              return total.toFixed(2);
+                            })()}</span>
                           </div>
+                          
+                          {/* Deposit & Balance Due */}
+                          {invoiceData.depositPaid > 0 && (
+                            <>
+                              <div className="flex justify-between py-2 text-green-600">
+                                <span>Amount Paid:</span>
+                                <span>-${(invoiceData.depositPaid || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between py-3 bg-blue-50 -mx-4 px-4 rounded" style={{backgroundColor: `${invoiceData.colors.primary}10`}}>
+                                <span className="text-xl font-bold" style={{color: invoiceData.colors.primary}}>Balance Due:</span>
+                                <span className="text-xl font-bold" style={{color: invoiceData.colors.primary}}>${(() => {
+                                  const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                                  const discount = invoiceData.discountValue > 0 
+                                    ? (invoiceData.discountType === 'percentage' 
+                                      ? (subtotal * invoiceData.discountValue / 100)
+                                      : invoiceData.discountValue)
+                                    : 0;
+                                  const afterDiscount = subtotal - discount;
+                                  const tax = invoiceData.taxRate > 0 ? (afterDiscount * (invoiceData.taxRate / 100)) : 0;
+                                  
+                                  // Add processing fees if enabled
+                                  let processingFee = 0;
+                                  if (invoiceData.enableProcessingFees) {
+                                    const paymentFee = CONFIG.invoice.paymentProcessorFees[invoiceData.selectedPaymentFee || 'none'];
+                                    const channelFee = CONFIG.invoice.salesChannelFees[invoiceData.selectedChannelFee || 'direct'];
+                                    
+                                    let totalFeeRate = 0;
+                                    let totalFixedFee = 0;
+                                    
+                                    if (paymentFee && invoiceData.selectedPaymentFee !== 'none') {
+                                      totalFeeRate += paymentFee.rate;
+                                      totalFixedFee += paymentFee.fixed || 0;
+                                    }
+                                    if (channelFee) {
+                                      totalFeeRate += channelFee.rate || 0;
+                                      totalFixedFee += channelFee.fixed || 0;
+                                    }
+                                    
+                                    processingFee = (subtotal * (totalFeeRate / 100)) + totalFixedFee;
+                                  }
+                                  
+                                  const total = afterDiscount + tax + processingFee;
+                                  const balance = total - (invoiceData.depositPaid || 0);
+                                  return Math.max(0, balance).toFixed(2);
+                                })()}</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Payment Methods */}
+                    {invoiceData.paymentMethods?.length > 0 && invoiceData.sections.paymentInstructions && (
+                      <div className="bg-gray-50 p-6 rounded-lg mb-6">
+                        <h3 className="text-sm font-bold uppercase mb-3" style={{color: invoiceData.colors.primary}}>Payment Methods</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          {invoiceData.paymentMethods.map(method => {
+                            const getMethodIcon = (method) => {
+                              const iconStyle = { width: '20px', height: '20px', display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' };
+                              
+                              if (method === 'venmo') {
+                                return <span className="iconify" data-icon="simple-icons:venmo" style={{...iconStyle, color: '#3D95CE'}}></span>;
+                              }
+                              if (method === 'paypal') {
+                                return <span className="iconify" data-icon="simple-icons:paypal" style={{...iconStyle, color: '#00457C'}}></span>;
+                              }
+                              if (method === 'zelle') {
+                                return <span className="iconify" data-icon="simple-icons:zelle" style={{...iconStyle, color: '#6D1ED4'}}></span>;
+                              }
+                              if (method === 'card') {
+                                return (
+                                  <svg style={iconStyle} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                  </svg>
+                                );
+                              }
+                              if (method === 'check') {
+                                return (
+                                  <svg style={iconStyle} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                );
+                              }
+                              if (method === 'wire') {
+                                return (
+                                  <svg style={iconStyle} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                                  </svg>
+                                );
+                              }
+                              return null;
+                            };
+
+                            return (
+                              <div key={method} className="flex items-center text-sm">
+                                <span className="font-semibold capitalize text-gray-700 flex items-center">
+                                  {getMethodIcon(method)}
+                                  {method === 'card' ? 'Credit Card' : 
+                                   method === 'wire' ? 'Wire Transfer' : 
+                                   method.charAt(0).toUpperCase() + method.slice(1)}:
+                                </span>
+                                <span className="text-gray-600 ml-2">{invoiceData.paymentDetails?.[method] || 'Contact for details'}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
