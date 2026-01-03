@@ -3,6 +3,24 @@ import CONFIG from './config/business-config'
 import useLocalStorage from './hooks/useLocalStorage'
 import { formatMoney, formatDate, getDueDateStatus, calculateOrderPricing, addDays } from './utils/helpers'
 
+// Icon renderer component - handles both SVG strings and image URLs
+const Icon = ({ icon, className = "w-5 h-5" }) => {
+  if (!icon) return null
+  
+  // If it's a URL (starts with http), render as img
+  if (icon.startsWith('http')) {
+    return <img src={icon} alt="" className={className} />
+  }
+  
+  // If it's an SVG string, render with dangerouslySetInnerHTML
+  if (icon.includes('<svg')) {
+    return <span dangerouslySetInnerHTML={{ __html: icon }} className="inline-flex items-center" />
+  }
+  
+  // Fallback: render as text
+  return <span className={className}>{icon}</span>
+}
+
 function App() {
   // State management - ALL hooks must be at top level
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -21,9 +39,57 @@ function App() {
     const saved = localStorage.getItem('anchor_crm_enabled_stores')
     return saved ? JSON.parse(saved) : CONFIG.stores.filter(s => s.enabled).map(s => s.id)
   })
+  const [connectedStores, setConnectedStores] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_connected_stores')
+    return saved ? JSON.parse(saved) : ['direct'] // Direct sale is always connected
+  })
+  const [customConfig, setCustomConfig] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_custom_config')
+    return saved ? JSON.parse(saved) : {}
+  })
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Merged config - custom overrides default
+  const activeConfig = {
+    ...CONFIG,
+    statuses: customConfig.statuses || CONFIG.statuses,
+    productTypes: customConfig.productTypes || CONFIG.productTypes,
+    sizes: customConfig.sizes || CONFIG.sizes,
+    materials: customConfig.materials || CONFIG.materials,
+    addons: customConfig.addons || CONFIG.addons,
+    invoice: customConfig.invoiceConfig ? {
+      businessName: customConfig.invoiceConfig.businessName || CONFIG.business.name,
+      email: customConfig.invoiceConfig.email || CONFIG.business.email,
+      phone: customConfig.invoiceConfig.phone || CONFIG.business.phone,
+      website: customConfig.invoiceConfig.website || CONFIG.business.website,
+      address: customConfig.invoiceConfig.address || CONFIG.business.address,
+      logo: customConfig.invoiceConfig.logo || null,
+      prefix: customConfig.invoiceConfig.prefix || 'ANC-INV',
+      terms: customConfig.invoiceConfig.terms || 'Payment is due within 30 days of invoice date.\nLate payments may incur additional fees.\nAll sales are final unless otherwise specified.',
+      paymentInstructions: customConfig.invoiceConfig.paymentInstructions || 'Please make payment via bank transfer or credit card.\nContact us for payment assistance.',
+      footer: customConfig.invoiceConfig.footer || 'Thank you for your business!'
+    } : {
+      businessName: CONFIG.business.name,
+      email: CONFIG.business.email,
+      phone: CONFIG.business.phone,
+      website: CONFIG.business.website,
+      address: CONFIG.business.address,
+      logo: null,
+      prefix: 'ANC-INV',
+      terms: 'Payment is due within 30 days of invoice date.\nLate payments may incur additional fees.\nAll sales are final unless otherwise specified.',
+      paymentInstructions: 'Please make payment via bank transfer or credit card.\nContact us for payment assistance.',
+      footer: 'Thank you for your business!'
+    }
+  }
 
   // Data management
   const dataManager = useLocalStorage()
+  
+  const saveCustomConfig = (updates) => {
+    const newConfig = { ...customConfig, ...updates }
+    setCustomConfig(newConfig)
+    localStorage.setItem('anchor_crm_custom_config', JSON.stringify(newConfig))
+  }
 
   // Initialize data on mount
   useEffect(() => {
@@ -65,8 +131,7 @@ function App() {
     { id: 'clients', icon: '👥', label: 'Clients' },
     { id: 'kanban', icon: '🎯', label: 'Kanban Board' },
     { id: 'analytics', icon: '📈', label: 'Analytics' },
-    { id: 'invoices', icon: '🧾', label: 'Invoices' },
-    { id: 'settings', icon: '⚙️', label: 'Settings' }
+    { id: 'invoices', icon: '🧾', label: 'Invoices' }
   ]
 
   // Modal handlers
@@ -87,6 +152,34 @@ function App() {
       addons: [], 
       priority: 'normal',
       store: 'direct'
+    })
+    setShowModal(true)
+  }
+
+  const openOrderDetailModal = (order) => {
+    // Convert old single-product format to items array for backward compatibility
+    let orderItems = order.items || []
+    if (!order.items && order.product) {
+      orderItems = [{
+        id: 'item_1',
+        type: order.product.type,
+        description: order.product.description,
+        size: order.product.size,
+        material: order.product.material,
+        addons: order.product.addons || [],
+        quantity: 1
+      }]
+    }
+    
+    setSelectedOrder({ ...order, items: orderItems })
+    setModalType('orderDetail')
+    setFormData({
+      ...order,
+      items: orderItems,
+      priority: order.priority,
+      store: order.store,
+      status: order.status,
+      notes: order.notes
     })
     setShowModal(true)
   }
@@ -177,6 +270,67 @@ function App() {
     closeModal()
   }
 
+  const handleUpdateOrder = () => {
+    if (!selectedOrder) return
+    
+    // Calculate total pricing from all items
+    const items = formData.items || selectedOrder.items || []
+    let totalPricing = { basePrice: 0, sizeModifier: 0, materialModifier: 0, addonsTotal: 0, subtotal: 0, tax: 0, total: 0 }
+    
+    if (items.length > 0) {
+      items.forEach(item => {
+        const itemPricing = calculateOrderPricing({
+          productType: item.type,
+          size: item.size,
+          material: item.material,
+          addons: item.addons,
+          store: formData.store || selectedOrder.store
+        })
+        const quantity = item.quantity || 1
+        totalPricing.basePrice += itemPricing.basePrice * quantity
+        totalPricing.sizeModifier += itemPricing.sizeModifier * quantity
+        totalPricing.materialModifier += itemPricing.materialModifier * quantity
+        totalPricing.addonsTotal += itemPricing.addonsTotal * quantity
+        totalPricing.subtotal += itemPricing.subtotal * quantity
+        totalPricing.tax += itemPricing.tax * quantity
+        totalPricing.total += itemPricing.total * quantity
+      })
+    }
+    
+    // Preserve the existing paid amount and recalculate balance
+    const paidAmount = selectedOrder.pricing.paid
+    const newBalance = totalPricing.total - paidAmount
+    
+    const updatedOrder = {
+      ...selectedOrder,
+      status: formData.status || selectedOrder.status,
+      priority: formData.priority || selectedOrder.priority,
+      store: formData.store || selectedOrder.store,
+      items: items,
+      // Keep product for backward compatibility (use first item)
+      product: items.length > 0 ? {
+        type: items[0].type,
+        description: items[0].description,
+        details: '',
+        size: items[0].size,
+        material: items[0].material,
+        addons: items[0].addons
+      } : selectedOrder.product,
+      pricing: {
+        ...totalPricing,
+        paid: paidAmount,
+        balance: newBalance,
+        deposit: selectedOrder.pricing.deposit
+      },
+      notes: formData.notes !== undefined ? formData.notes : selectedOrder.notes,
+      updatedAt: new Date().toISOString()
+    }
+    
+    dataManager.orders.save(updatedOrder)
+    loadData()
+    closeModal()
+  }
+
   // Load sample data for testing
   const loadSampleData = () => {
     dataManager.loadSampleData()
@@ -198,6 +352,16 @@ function App() {
     localStorage.setItem('anchor_crm_enabled_stores', JSON.stringify(updated))
   }
 
+  const toggleStoreConnection = (storeId) => {
+    if (storeId === 'direct') return // Direct sale cannot be disconnected
+    
+    const updated = connectedStores.includes(storeId)
+      ? connectedStores.filter(id => id !== storeId)
+      : [...connectedStores, storeId]
+    setConnectedStores(updated)
+    localStorage.setItem('anchor_crm_connected_stores', JSON.stringify(updated))
+  }
+
   // Render landing page
   if (!isLoggedIn) {
 
@@ -208,27 +372,27 @@ function App() {
       description: 'Visual workflow management with drag-and-drop status updates'
     },
     {
-      icon: '💰',
+      icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
       title: 'Smart Pricing',
       description: 'Automatic calculations with modifiers, add-ons, and tax'
     },
     {
-      icon: '👥',
+      icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>',
       title: 'Client Management',
       description: 'Complete customer profiles with order history and analytics'
     },
     {
-      icon: '📊',
+      icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>',
       title: 'Analytics Dashboard',
       description: 'Real-time insights into revenue, orders, and performance'
     },
     {
-      icon: '🧾',
+      icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
       title: 'Invoice Generation',
       description: 'Professional invoices with one-click generation and printing'
     },
     {
-      icon: '💾',
+      icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>',
       title: 'Local Storage',
       description: 'All data stored locally - no servers, no subscriptions required'
     }
@@ -342,19 +506,19 @@ function App() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
-              { icon: '📋', title: 'Kanban Board', description: 'Visual workflow management with drag-and-drop status updates', status: 'Phase 2' },
-              { icon: '💰', title: 'Smart Pricing', description: 'Automatic calculations with modifiers, add-ons, and tax', status: 'Ready' },
-              { icon: '👥', title: 'Client Management', description: 'Complete customer profiles with order history and analytics', status: 'Ready' },
-              { icon: '📊', title: 'Analytics Dashboard', description: 'Real-time insights into revenue, orders, and performance', status: 'Phase 4' },
-              { icon: '🧾', title: 'Invoice Generation', description: 'Professional invoices with one-click generation and printing', status: 'Ready' },
-              { icon: '💾', title: 'Local Storage', description: 'All data stored locally - no servers, no subscriptions required', status: 'Ready' }
+              { icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>', title: 'Kanban Board', description: 'Visual workflow management with drag-and-drop status updates', status: 'Phase 2' },
+              { icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>', title: 'Smart Pricing', description: 'Automatic calculations with modifiers, add-ons, and tax', status: 'Ready' },
+              { icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>', title: 'Client Management', description: 'Complete customer profiles with order history and analytics', status: 'Ready' },
+              { icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>', title: 'Analytics Dashboard', description: 'Real-time insights into revenue, orders, and performance', status: 'Phase 4' },
+              { icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>', title: 'Invoice Generation', description: 'Professional invoices with one-click generation and printing', status: 'Ready' },
+              { icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>', title: 'Local Storage', description: 'All data stored locally - no servers, no subscriptions required', status: 'Ready' }
             ].map((feature, index) => (
               <div 
                 key={index}
                 className="bg-slate-900 border border-slate-800 rounded-2xl p-8 hover:border-blue-600 transition-all hover:transform hover:-translate-y-2"
               >
                 <div className="flex justify-between items-start mb-4">
-                  <div className="text-5xl">{feature.icon}</div>
+                  <div className="text-5xl"><Icon icon={feature.icon} className="w-12 h-12" /></div>
                   <span className={`text-xs px-2 py-1 rounded-full ${
                     feature.status === 'Ready' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
                   }`}>
@@ -478,8 +642,28 @@ function App() {
   // ===== CRM DASHBOARD LAYOUT =====
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 flex">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900/50 backdrop-blur-md border-r border-slate-800 flex flex-col fixed h-full">
+      <aside className={`w-64 bg-slate-900/50 backdrop-blur-md border-r border-slate-800 flex flex-col fixed h-full z-50 transition-transform duration-300 lg:translate-x-0 ${
+        mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}>
+        {/* Mobile Close Button */}
+        <button
+          onClick={() => setMobileMenuOpen(false)}
+          className="lg:hidden absolute top-4 right-4 text-slate-400 hover:text-white"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
         {/* Logo Section in Sidebar */}
         <div className="p-6 border-b border-slate-800">
           <img 
@@ -508,10 +692,7 @@ function App() {
                           : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                       }`}
                     >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-xl">{item.icon}</span>
-                        <span className="font-medium">{item.label}</span>
-                      </div>
+                      <span className="font-medium">{item.label}</span>
                       <svg 
                         className={`w-4 h-4 transition-transform ${ordersExpanded ? 'rotate-180' : ''}`}
                         fill="none" 
@@ -535,7 +716,6 @@ function App() {
                               : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                           }`}
                         >
-                          <span>📊</span>
                           <span>All Orders</span>
                         </button>
                         {CONFIG.stores
@@ -556,7 +736,7 @@ function App() {
                                 }`}
                               >
                                 <div className="flex items-center space-x-2">
-                                  <span>{store.icon}</span>
+                                  <img src={store.icon} alt={store.label} className="w-4 h-4" />
                                   <span>{store.label}</span>
                                 </div>
                                 <span className="text-xs text-slate-500">({storeOrders.length})</span>
@@ -572,14 +752,17 @@ function App() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentView(item.id)}
+                  onClick={() => {
+                    setCurrentView(item.id)
+                    setMobileMenuOpen(false)
+                  }}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
                     currentView === item.id
                       ? 'bg-blue-600 text-white shadow-lg'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
-                  <span className="text-xl">{item.icon}</span>
+                  <Icon icon={item.icon} className="w-5 h-5" />
                   <span className="font-medium">{item.label}</span>
                 </button>
               )
@@ -603,65 +786,92 @@ function App() {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 ml-64">
+      <div className="flex-1 lg:ml-64 w-full">
         {/* Header Bar */}
         <header className="bg-slate-900/50 backdrop-blur-md border-b border-slate-800 p-4 sticky top-0 z-40">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-xl font-bold text-white capitalize">{currentView}</h1>
-              <p className="text-sm text-slate-400">{CONFIG.business.tagline}</p>
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden text-white mr-3"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            
+            <div className="flex-1">
+              <h1 className="text-lg lg:text-xl font-bold text-white capitalize">{currentView}</h1>
+              <p className="text-xs lg:text-sm text-slate-400 hidden sm:block">{CONFIG.business.tagline}</p>
             </div>
-            <div className="flex space-x-3">
+            <div className="flex space-x-2 lg:space-x-3">
               <button 
                 onClick={openNewClientModal}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm transition-colors flex items-center space-x-2"
+                className="px-3 lg:px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm transition-colors flex items-center space-x-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                <span>New Client</span>
+                <span className="hidden sm:inline">New Client</span>
+                <span className="sm:hidden">+</span>
               </button>
               <button 
                 onClick={openNewOrderModal}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors flex items-center space-x-2"
+                className="px-3 lg:px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors flex items-center space-x-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                <span>New Order</span>
+                <span className="hidden sm:inline">New Order</span>
+                <span className="sm:hidden">+</span>
               </button>
             </div>
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="p-6">
+        <main className="p-4 lg:p-6">
           {currentView === 'dashboard' && (
             <div>
               {/* Stats Bar */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 lg:p-6">
                   <div className="text-slate-400 text-sm mb-2">Total Orders</div>
-                  <div className="text-3xl font-bold">{stats.total || 0}</div>
+                  <div className="text-xl font-bold whitespace-nowrap overflow-hidden text-ellipsis">{stats.total || 0}</div>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                   <div className="text-slate-400 text-sm mb-2">Active Orders</div>
-                  <div className="text-3xl font-bold text-blue-400">{stats.active || 0}</div>
+                  <div className="text-xl font-bold text-blue-400 whitespace-nowrap overflow-hidden text-ellipsis">{stats.active || 0}</div>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                   <div className="text-slate-400 text-sm mb-2">Total Revenue</div>
-                  <div className="text-3xl font-bold text-green-400">{formatMoney(stats.totalRevenue || 0)}</div>
+                  <div className="text-xl font-bold text-green-400 whitespace-nowrap overflow-hidden text-ellipsis">{formatMoney(stats.totalRevenue || 0)}</div>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                   <div className="text-slate-400 text-sm mb-2">Outstanding</div>
-                  <div className="text-3xl font-bold text-yellow-400">{formatMoney(stats.outstandingBalance || 0)}</div>
+                  <div className="text-xl font-bold text-yellow-400 whitespace-nowrap overflow-hidden text-ellipsis">{formatMoney(stats.outstandingBalance || 0)}</div>
                 </div>
               </div>
 
               {/* Recent Orders Preview */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                 <h2 className="text-2xl font-bold mb-6 text-white">Recent Orders</h2>
-                <div className="space-y-4">
+                {orders.length === 0 ? (
+                  <div className="text-center py-12">
+                    <svg className="w-16 h-16 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <h3 className="text-xl font-semibold text-white mb-2">No orders yet</h3>
+                    <p className="text-slate-400 mb-6">Create your first order to get started</p>
+                    <button 
+                      onClick={openNewOrderModal}
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium"
+                    >
+                      Create First Order
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
                   {orders.slice(0, 5).map(order => {
                     const client = clients.find(c => c.id === order.clientId)
                     const dueDateStatus = getDueDateStatus(order.timeline?.dueDate)
@@ -670,13 +880,14 @@ function App() {
                     return (
                       <div 
                         key={order.id}
-                        className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors cursor-pointer border-l-4"
+                        onClick={() => openOrderDetailModal(order)}
+                        className="bg-slate-800 rounded-lg p-4 lg:p-6 hover:bg-slate-700 transition-colors cursor-pointer border-l-4"
                         style={{ borderLeftColor: statusConfig?.color || '#64748b' }}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="flex items-center space-x-3 mb-2">
-                              <span className="text-lg">{statusConfig?.icon}</span>
+                              <Icon icon={statusConfig?.icon} className="w-5 h-5" />
                               <span className="font-semibold text-white">{client?.name || 'Unknown Client'}</span>
                               <span className="text-slate-400 text-sm font-mono">{order.orderNumber}</span>
                             </div>
@@ -691,7 +902,8 @@ function App() {
                       </div>
                     )
                   })}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -706,10 +918,50 @@ function App() {
                 </h2>
               </div>
               
-              <div className="space-y-4">
-                {orders
-                  .filter(order => storeFilter === 'all' || order.store === storeFilter)
-                  .map(order => {
+              {(() => {
+                const filteredOrders = orders.filter(order => storeFilter === 'all' || order.store === storeFilter)
+                
+                if (filteredOrders.length === 0 && orders.length === 0) {
+                  return (
+                    <div className="text-center py-16">
+                      <svg className="w-20 h-20 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      </svg>
+                      <h3 className="text-xl font-semibold text-white mb-2">No orders yet</h3>
+                      <p className="text-slate-400 mb-6">Start by creating your first order</p>
+                      <button 
+                        onClick={openNewOrderModal}
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium"
+                      >
+                        Create First Order
+                      </button>
+                    </div>
+                  )
+                }
+                
+                if (filteredOrders.length === 0) {
+                  return (
+                    <div className="text-center py-16">
+                      <svg className="w-20 h-20 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <h3 className="text-xl font-semibold text-white mb-2">No orders found</h3>
+                      <p className="text-slate-400 mb-6">
+                        No orders for {CONFIG.stores.find(s => s.id === storeFilter)?.label}
+                      </p>
+                      <button 
+                        onClick={() => setStoreFilter('all')}
+                        className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-white font-medium"
+                      >
+                        View All Orders
+                      </button>
+                    </div>
+                  )
+                }
+                
+                return (
+                  <div className="space-y-4">
+                    {filteredOrders.map(order => {
                   const client = clients.find(c => c.id === order.clientId)
                   const dueDateStatus = getDueDateStatus(order.timeline?.dueDate)
                   const statusConfig = CONFIG.statuses.find(s => s.id === order.status)
@@ -718,13 +970,14 @@ function App() {
                   return (
                     <div 
                       key={order.id}
+                      onClick={() => openOrderDetailModal(order)}
                       className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors cursor-pointer border-l-4"
                       style={{ borderLeftColor: statusConfig?.color || '#64748b' }}
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-2">
-                            <span className="text-lg">{statusConfig?.icon}</span>
+                            <Icon icon={statusConfig?.icon} className="w-5 h-5" />
                             <span className="font-semibold text-lg text-white">{client?.name || 'Unknown Client'}</span>
                             <span className="text-slate-400 text-sm font-mono">{order.orderNumber}</span>
                             <span 
@@ -735,10 +988,11 @@ function App() {
                             </span>
                             {storeConfig && (
                               <span 
-                                className="px-2 py-1 rounded text-xs font-medium"
+                                className="px-2 py-1 rounded text-xs font-medium flex items-center space-x-1"
                                 style={{ backgroundColor: storeConfig.color + '20', color: storeConfig.color }}
                               >
-                                {storeConfig.icon} {storeConfig.label}
+                                <img src={storeConfig.icon} alt={storeConfig.label} className="w-3 h-3" />
+                                <span>{storeConfig.label}</span>
                               </span>
                             )}
                           </div>
@@ -766,14 +1020,31 @@ function App() {
                     </div>
                   )
                 })}
-              </div>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
           {currentView === 'clients' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h2 className="text-2xl font-bold mb-6 text-white">All Clients</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {clients.length === 0 ? (
+                <div className="text-center py-16">
+                  <svg className="w-20 h-20 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                  <h3 className="text-xl font-semibold text-white mb-2">No clients yet</h3>
+                  <p className="text-slate-400 mb-6">Add your first client to start managing relationships</p>
+                  <button 
+                    onClick={openNewClientModal}
+                    className="px-6 py-3 bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors text-white font-medium"
+                  >
+                    Add First Client
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {clients.map(client => {
                   const clientOrders = orders.filter(o => o.clientId === client.id)
                   const totalSpent = clientOrders.reduce((sum, o) => sum + (o.pricing?.paid || 0), 0)
@@ -811,15 +1082,656 @@ function App() {
                     </div>
                   )
                 })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Kanban Board View */}
+          {currentView === 'kanban' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl lg:text-2xl font-bold text-white">Kanban Board</h2>
+                <button
+                  onClick={openNewOrderModal}
+                  className="px-3 lg:px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium flex items-center space-x-2 text-sm lg:text-base"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span className="hidden sm:inline">New Order</span>
+                  <span className="sm:hidden">+</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto pb-4">
+                {activeConfig.statuses.map(status => {
+                  const statusOrders = orders.filter(o => o.status === status.id)
+                  const totalValue = statusOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
+                  
+                  return (
+                    <div 
+                      key={status.id}
+                      className="bg-slate-900 border border-slate-800 rounded-xl p-4 min-w-[280px]"
+                    >
+                      {/* Column Header */}
+                      <div className="mb-4 pb-3 border-b border-slate-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <Icon icon={status.icon} className="w-6 h-6" />
+                            <h3 className="font-bold text-white">{status.label}</h3>
+                          </div>
+                          <span 
+                            className="px-2 py-1 rounded-full text-xs font-bold"
+                            style={{ backgroundColor: status.color + '20', color: status.color }}
+                          >
+                            {statusOrders.length}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-400">{formatMoney(totalValue)}</div>
+                      </div>
+
+                      {/* Order Cards */}
+                      <div 
+                        className="space-y-3 min-h-[200px]"
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.add('bg-slate-800')
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove('bg-slate-800')
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.remove('bg-slate-800')
+                          const orderId = e.dataTransfer.getData('orderId')
+                          const order = orders.find(o => o.id === orderId)
+                          if (order && order.status !== status.id) {
+                            const updatedOrder = {
+                              ...order,
+                              status: status.id,
+                              updatedAt: new Date().toISOString()
+                            }
+                            dataManager.orders.save(updatedOrder)
+                            loadData()
+                          }
+                        }}
+                      >
+                        {statusOrders.length === 0 ? (
+                          <div className="text-center py-8 text-slate-500 text-sm">
+                            No orders
+                          </div>
+                        ) : (
+                          statusOrders.map(order => {
+                            const client = clients.find(c => c.id === order.clientId)
+                            const storeConfig = CONFIG.stores.find(s => s.id === order.store)
+                            
+                            return (
+                              <div
+                                key={order.id}
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('orderId', order.id)
+                                  e.currentTarget.classList.add('opacity-50')
+                                }}
+                                onDragEnd={(e) => {
+                                  e.currentTarget.classList.remove('opacity-50')
+                                }}
+                                onClick={() => openOrderDetailModal(order)}
+                                className="bg-slate-800 rounded-lg p-3 hover:bg-slate-700 transition-colors cursor-move border border-slate-700 hover:border-slate-600"
+                              >
+                                {/* Client Name */}
+                                <div className="font-semibold text-white mb-1 text-sm">
+                                  {client?.name || 'Unknown'}
+                                </div>
+                                
+                                {/* Order Number */}
+                                <div className="text-xs text-slate-400 font-mono mb-2">
+                                  {order.orderNumber}
+                                </div>
+
+                                {/* Product Info */}
+                                {order.items && order.items.length > 0 ? (
+                                  <div className="text-xs text-slate-300 mb-2 line-clamp-2">
+                                    {order.items.length === 1 
+                                      ? order.items[0].description || activeConfig.productTypes.find(pt => pt.id === order.items[0].type)?.label
+                                      : `${order.items.length} items`
+                                    }
+                                  </div>
+                                ) : order.product ? (
+                                  <div className="text-xs text-slate-300 mb-2 line-clamp-2">
+                                    {order.product.description || activeConfig.productTypes.find(pt => pt.id === order.product.type)?.label}
+                                  </div>
+                                ) : null}
+
+                                {/* Store Badge */}
+                                {storeConfig && storeConfig.id !== 'direct' && (
+                                  <div className="mb-2">
+                                    <span 
+                                      className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs"
+                                      style={{ backgroundColor: storeConfig.color + '20', color: storeConfig.color }}
+                                    >
+                                      <img src={storeConfig.icon} alt="" className="w-3 h-3" />
+                                      <span>{storeConfig.label}</span>
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Pricing */}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-700">
+                                  <span className="text-sm font-bold text-green-400">
+                                    {formatMoney(order.pricing?.total || 0)}
+                                  </span>
+                                  {order.pricing?.balance > 0 && (
+                                    <span className="text-xs text-yellow-400">
+                                      Due: {formatMoney(order.pricing.balance)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {(currentView === 'kanban' || currentView === 'analytics' || currentView === 'invoices' || currentView === 'settings') && (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
-              <div className="text-6xl mb-4">🚧</div>
-              <h2 className="text-2xl font-bold text-white mb-4 capitalize">{currentView} Coming Soon</h2>
-              <p className="text-slate-400">This feature is currently under development. Check back soon!</p>
+          {currentView === 'analytics' && (
+            <div className="space-y-6">
+              {/* Analytics Header */}
+              <div className="flex justify-between items-center">
+                <div>
+                  <h1 className="text-3xl font-bold text-white mb-2">Analytics Dashboard</h1>
+                  <p className="text-slate-400">Insights and performance metrics</p>
+                </div>
+              </div>
+
+              {/* Key Metrics Grid */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+                {/* Total Revenue */}
+                <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-xl p-4 lg:p-6 shadow-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="text-xl font-bold text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {formatMoney(orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0))}
+                  </div>
+                  <div className="text-green-100 text-sm">Total Revenue</div>
+                </div>
+
+                {/* Paid Amount */}
+                <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 shadow-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="text-xl font-bold text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {formatMoney(orders.reduce((sum, o) => sum + (o.pricing?.paid || 0), 0))}
+                  </div>
+                  <div className="text-blue-100 text-sm">Total Collected</div>
+                </div>
+
+                {/* Outstanding Balance */}
+                <div className="bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl p-6 shadow-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="text-xl font-bold text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {formatMoney(orders.reduce((sum, o) => sum + (o.pricing?.balance || 0), 0))}
+                  </div>
+                  <div className="text-amber-100 text-sm">Outstanding</div>
+                </div>
+
+                {/* Avg Order Value */}
+                <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl p-6 shadow-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                    </svg>
+                  </div>
+                  <div className="text-xl font-bold text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {formatMoney(orders.length > 0 ? orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0) / orders.length : 0)}
+                  </div>
+                  <div className="text-purple-100 text-sm">Avg Order Value</div>
+                </div>
+              </div>
+
+              {/* Charts Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Order Status Distribution */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-white mb-6">Order Status Distribution</h3>
+                  <div className="space-y-3">
+                    {CONFIG.statuses.map(status => {
+                      const statusOrders = orders.filter(o => o.status === status.id)
+                      const percentage = orders.length > 0 ? (statusOrders.length / orders.length) * 100 : 0
+                      const revenue = statusOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
+                      
+                      return (
+                        <div key={status.id}>
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center space-x-2">
+                              <Icon icon={status.icon} className="w-4 h-4" />
+                              <span className="text-white text-sm font-medium">{status.label}</span>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <span className="text-slate-400 text-sm">{statusOrders.length} orders</span>
+                              <span className="text-white text-sm font-bold">{formatMoney(revenue)}</span>
+                            </div>
+                          </div>
+                          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ 
+                                width: `${percentage}%`,
+                                backgroundColor: status.color
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Sales by Channel */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-white mb-6">Sales by Channel</h3>
+                  <div className="space-y-3">
+                    {CONFIG.stores.map(store => {
+                      const storeOrders = orders.filter(o => o.store === store.id)
+                      const revenue = storeOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
+                      const fees = storeOrders.reduce((sum, o) => sum + ((o.pricing?.total || 0) * (store.commission / 100)), 0)
+                      const netRevenue = revenue - fees
+                      const percentage = orders.length > 0 ? (storeOrders.length / orders.length) * 100 : 0
+                      
+                      if (storeOrders.length === 0) return null
+                      
+                      return (
+                        <div key={store.id}>
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center space-x-2">
+                              <Icon icon={store.icon} className="w-4 h-4" />
+                              <span className="text-white text-sm font-medium">{store.label}</span>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <span className="text-slate-400 text-sm">{storeOrders.length} orders</span>
+                              <span className="text-white text-sm font-bold">{formatMoney(netRevenue)}</span>
+                            </div>
+                          </div>
+                          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ 
+                                width: `${percentage}%`,
+                                backgroundColor: store.color
+                              }}
+                            />
+                          </div>
+                          {store.commission > 0 && fees > 0 && (
+                            <div className="text-xs text-slate-500 mt-1 ml-6">
+                              Fees: {formatMoney(fees)} ({store.commission}%)
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }).filter(Boolean)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Top Clients */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-white mb-6">Top Clients</h3>
+                  <div className="space-y-3">
+                    {clients
+                      .map(client => {
+                        const clientOrders = orders.filter(o => o.clientId === client.id)
+                        const revenue = clientOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
+                        const paid = clientOrders.reduce((sum, o) => sum + (o.pricing?.paid || 0), 0)
+                        return { ...client, orderCount: clientOrders.length, revenue, paid }
+                      })
+                      .sort((a, b) => b.revenue - a.revenue)
+                      .slice(0, 5)
+                      .map((client, index) => (
+                        <div key={client.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg hover:bg-slate-800 transition-colors">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                              #{index + 1}
+                            </div>
+                            <div>
+                              <div className="text-white font-medium">{client.name}</div>
+                              <div className="text-slate-400 text-xs">{client.orderCount} orders</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-green-400 font-bold">{formatMoney(client.revenue)}</div>
+                            <div className="text-slate-500 text-xs">Paid: {formatMoney(client.paid)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    {clients.length === 0 && (
+                      <div className="text-center text-slate-500 py-8">No client data yet</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Revenue Insights */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-white mb-6">Revenue Insights</h3>
+                  <div className="space-y-4">
+                    {/* Collection Rate */}
+                    <div className="p-4 bg-slate-800/50 rounded-lg">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-slate-300 text-sm">Collection Rate</span>
+                        <span className="text-white font-bold">
+                          {orders.length > 0 
+                            ? ((orders.reduce((sum, o) => sum + (o.pricing?.paid || 0), 0) / orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)) * 100).toFixed(1)
+                            : 0}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-700 rounded-full h-2">
+                        <div 
+                          className="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full"
+                          style={{ 
+                            width: orders.length > 0 
+                              ? `${((orders.reduce((sum, o) => sum + (o.pricing?.paid || 0), 0) / orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)) * 100).toFixed(1)}%`
+                              : '0%'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Completion Rate */}
+                    <div className="p-4 bg-slate-800/50 rounded-lg">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-slate-300 text-sm">Completion Rate</span>
+                        <span className="text-white font-bold">
+                          {orders.length > 0 
+                            ? ((orders.filter(o => o.status === 'completed').length / orders.length) * 100).toFixed(1)
+                            : 0}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-700 rounded-full h-2">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full"
+                          style={{ 
+                            width: orders.length > 0 
+                              ? `${((orders.filter(o => o.status === 'completed').length / orders.length) * 100).toFixed(1)}%`
+                              : '0%'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Active Orders */}
+                    <div className="p-4 bg-slate-800/50 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-300 text-sm">Active Orders</span>
+                        <span className="text-white font-bold text-2xl">
+                          {orders.filter(o => !['completed', 'shipped'].includes(o.status)).length}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">In progress or pending</div>
+                    </div>
+
+                    {/* Payment Methods */}
+                    <div className="p-4 bg-slate-800/50 rounded-lg">
+                      <div className="text-slate-300 text-sm mb-3">Popular Payment Methods</div>
+                      <div className="space-y-2">
+                        {(() => {
+                          const paymentCounts = {}
+                          orders.forEach(order => {
+                            if (order.payments && order.payments.length > 0) {
+                              order.payments.forEach(payment => {
+                                paymentCounts[payment.method] = (paymentCounts[payment.method] || 0) + 1
+                              })
+                            }
+                          })
+                          return Object.entries(paymentCounts)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 3)
+                            .map(([method, count]) => {
+                              const methodConfig = CONFIG.paymentMethods.find(m => m.id === method)
+                              return (
+                                <div key={method} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center space-x-2">
+                                    <Icon icon={methodConfig?.icon} className="w-3 h-3" />
+                                    <span className="text-white">{methodConfig?.label || method}</span>
+                                  </div>
+                                  <span className="text-slate-400">{count} payments</span>
+                                </div>
+                              )
+                            })
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {currentView === 'invoices' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Invoices</h2>
+                  <p className="text-slate-400">Generate and manage invoices</p>
+                </div>
+              </div>
+
+              {orders.length === 0 ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
+                  <svg className="w-16 h-16 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <h3 className="text-xl font-bold text-white mb-2">No Orders Yet</h3>
+                  <p className="text-slate-400 mb-4">Create your first order to generate invoices</p>
+                  <button 
+                    onClick={openNewOrderModal}
+                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium"
+                  >
+                    Create First Order
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {orders.map(order => {
+                    const client = clients.find(c => c.id === order.clientId)
+                    const statusConfig = activeConfig.statuses.find(s => s.id === order.status)
+                    
+                    return (
+                      <div 
+                        key={order.id}
+                        className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-blue-600 transition-colors"
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="text-lg font-bold text-white">{order.orderNumber}</h3>
+                            <p className="text-sm text-slate-400">{client?.name || 'Unknown Client'}</p>
+                          </div>
+                          <span 
+                            className="px-2 py-1 rounded-full text-xs font-medium"
+                            style={{ backgroundColor: statusConfig?.color + '20', color: statusConfig?.color }}
+                          >
+                            {statusConfig?.label}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2 mb-4 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Total:</span>
+                            <span className="text-white font-bold">{formatMoney(order.pricing?.total || 0)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Paid:</span>
+                            <span className="text-green-400 font-bold">{formatMoney(order.pricing?.paid || 0)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Balance:</span>
+                            <span className={`font-bold ${(order.pricing?.balance || 0) > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+                              {formatMoney(order.pricing?.balance || 0)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between pt-2 border-t border-slate-700">
+                            <span className="text-slate-400">Date:</span>
+                            <span className="text-white">{formatDate(order.createdAt)}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => {
+                              // Simple print functionality
+                              const printWindow = window.open('', '_blank')
+                              printWindow.document.write(`
+                                <html>
+                                  <head>
+                                    <title>Invoice ${order.orderNumber}</title>
+                                    <style>
+                                      body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+                                      .header { border-bottom: 3px solid #000; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: start; }
+                                      .logo { max-width: 150px; max-height: 60px; object-fit: contain; }
+                                      .company { font-size: 24px; font-weight: bold; }
+                                      .company-info { font-size: 14px; line-height: 1.6; }
+                                      .invoice-title { font-size: 32px; font-weight: bold; margin: 20px 0; }
+                                      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0; }
+                                      .table { width: 100%; border-collapse: collapse; margin: 30px 0; }
+                                      .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+                                      .table th { background: #f5f5f5; font-weight: bold; }
+                                      .totals { text-align: right; margin-top: 30px; }
+                                      .totals div { padding: 8px 0; }
+                                      .total-amount { font-size: 24px; font-weight: bold; color: #16a34a; }
+                                      .terms { margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; white-space: pre-line; }
+                                      .footer { text-align: center; margin-top: 30px; font-size: 14px; color: #666; }
+                                    </style>
+                                  </head>
+                                  <body>
+                                    <div class="header">
+                                      <div>
+                                        <div class="company">${activeConfig.invoice.businessName}</div>
+                                        <div class="company-info">
+                                          ${activeConfig.invoice.email} • ${activeConfig.invoice.phone}<br/>
+                                          ${activeConfig.invoice.website ? `${activeConfig.invoice.website}<br/>` : ''}
+                                          ${activeConfig.invoice.address}
+                                        </div>
+                                      </div>
+                                      ${activeConfig.invoice.logo ? `<img src="${activeConfig.invoice.logo}" alt="Logo" class="logo" />` : ''}
+                                    </div>
+                                    
+                                    <div class="invoice-title">INVOICE</div>
+                                    
+                                    <div class="info-grid">
+                                      <div>
+                                        <strong>Bill To:</strong><br/>
+                                        ${client?.name || 'Unknown Client'}<br/>
+                                        ${client?.email || ''}<br/>
+                                        ${client?.phone || ''}
+                                      </div>
+                                      <div style="text-align: right;">
+                                        <strong>Invoice #:</strong> ${activeConfig.invoice.prefix}-${order.orderNumber}<br/>
+                                        <strong>Date:</strong> ${formatDate(order.createdAt)}<br/>
+                                        ${order.timeline?.dueDate ? `<strong>Due Date:</strong> ${formatDate(order.timeline.dueDate)}<br/>` : ''}
+                                        <strong>Status:</strong> ${statusConfig?.label || order.status}
+                                      </div>
+                                    </div>
+                                    
+                                    <table class="table">
+                                      <thead>
+                                        <tr>
+                                          <th>Description</th>
+                                          <th>Qty</th>
+                                          <th style="text-align: right;">Price</th>
+                                          <th style="text-align: right;">Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        ${(order.items || []).map(item => {
+                                          const itemPricing = calculateOrderPricing({
+                                            productType: item.type,
+                                            size: item.size,
+                                            material: item.material,
+                                            addons: item.addons,
+                                            store: order.store
+                                          })
+                                          const itemTotal = itemPricing.total * (item.quantity || 1)
+                                          return `
+                                            <tr>
+                                              <td>
+                                                <strong>${item.description || 'Product'}</strong><br/>
+                                                <small>${item.size} • ${item.material}${item.addons?.length > 0 ? ' • ' + item.addons.length + ' add-ons' : ''}</small>
+                                              </td>
+                                              <td>${item.quantity || 1}</td>
+                                              <td style="text-align: right;">${formatMoney(itemPricing.total)}</td>
+                                              <td style="text-align: right;">${formatMoney(itemTotal)}</td>
+                                            </tr>
+                                          `
+                                        }).join('')}
+                                      </tbody>
+                                    </table>
+                                    
+                                    <div class="totals">
+                                      <div><strong>Subtotal:</strong> ${formatMoney(order.pricing?.subtotal || 0)}</div>
+                                      ${order.pricing?.tax ? `<div><strong>Tax:</strong> ${formatMoney(order.pricing.tax)}</div>` : ''}
+                                      <div class="total-amount">Total: ${formatMoney(order.pricing?.total || 0)}</div>
+                                      ${order.pricing?.paid ? `<div style="color: #16a34a;"><strong>Paid:</strong> ${formatMoney(order.pricing.paid)}</div>` : ''}
+                                      ${(order.pricing?.balance || 0) > 0 ? `<div style="color: #f59e0b;"><strong>Balance Due:</strong> ${formatMoney(order.pricing.balance)}</div>` : ''}
+                                    </div>
+                                    
+                                    ${activeConfig.invoice.paymentInstructions ? `
+                                      <div style="margin-top: 30px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+                                        <strong>Payment Instructions:</strong><br/>
+                                        <div style="margin-top: 10px; white-space: pre-line;">${activeConfig.invoice.paymentInstructions}</div>
+                                      </div>
+                                    ` : ''}
+                                    
+                                    ${activeConfig.invoice.terms ? `
+                                      <div class="terms">
+                                        <strong>Terms & Conditions:</strong><br/>
+                                        ${activeConfig.invoice.terms}
+                                      </div>
+                                    ` : ''}
+                                    
+                                    <div class="footer">
+                                      ${activeConfig.invoice.footer}
+                                    </div>
+                                  </body>
+                                </html>
+                              `)
+                              printWindow.document.close()
+                              printWindow.print()
+                            }}
+                            className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium text-sm flex items-center justify-center space-x-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                            <span>Print</span>
+                          </button>
+                          <button
+                            onClick={() => openOrderDetailModal(order)}
+                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-medium text-sm"
+                          >
+                            View
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -1022,7 +1934,7 @@ function App() {
                       <option value="">Select product type...</option>
                       {CONFIG.productTypes.map(type => (
                         <option key={type.id} value={type.id}>
-                          {type.icon} {type.label} (Base: ${type.basePrice})
+                          {type.label} (Base: ${type.basePrice})
                         </option>
                       ))}
                     </select>
@@ -1090,7 +2002,7 @@ function App() {
                             }}
                             className="w-4 h-4 bg-slate-700 border-slate-600 rounded"
                           />
-                          <span className="flex-1 text-white">{addon.icon} {addon.label}</span>
+                          <span className="flex-1 text-white flex items-center space-x-2"><Icon icon={addon.icon} className="w-4 h-4" /><span>{addon.label}</span></span>
                           <span className="text-green-400 font-medium">${addon.price}</span>
                         </label>
                       ))}
@@ -1106,7 +2018,7 @@ function App() {
                     >
                       {CONFIG.priorities.map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.icon} {p.label}
+                          {p.label}
                         </option>
                       ))}
                     </select>
@@ -1121,7 +2033,7 @@ function App() {
                     >
                       {CONFIG.stores.map(s => (
                         <option key={s.id} value={s.id}>
-                          {s.icon} {s.label} {s.commission > 0 ? `(${s.commission}% fee)` : ''}
+                          {s.label} {s.commission > 0 ? `(${s.commission}% fee)` : ''}
                         </option>
                       ))}
                     </select>
@@ -1155,6 +2067,599 @@ function App() {
                 </div>
               </>
             )}
+
+            {/* Order Detail Modal */}
+            {modalType === 'orderDetail' && selectedOrder && (
+              <>
+                <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">{selectedOrder.orderNumber}</h2>
+                    <p className="text-sm text-slate-400 mt-1">
+                      Created {formatDate(selectedOrder.createdAt)}
+                    </p>
+                  </div>
+                  <button onClick={closeModal} className="text-slate-400 hover:text-white text-2xl">×</button>
+                </div>
+                
+                <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+                  {/* Client Info */}
+                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                    <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <span>Client</span>
+                    </h3>
+                    <div className="text-white font-medium">{clients.find(c => c.id === selectedOrder.clientId)?.name || 'Unknown'}</div>
+                    <div className="text-sm text-slate-400">{clients.find(c => c.id === selectedOrder.clientId)?.email || ''}</div>
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
+                    <select
+                      value={formData.status || selectedOrder.status}
+                      onChange={(e) => setFormData({...formData, status: e.target.value})}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      {CONFIG.statuses.map(status => (
+                        <option key={status.id} value={status.id}>
+                          {status.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Order Items */}
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-sm font-semibold text-slate-300 flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                        <span>Order Items</span>
+                      </h3>
+                      <button
+                        onClick={() => {
+                          const newItem = {
+                            id: `item_${Date.now()}`,
+                            type: 'custom_furniture',
+                            description: '',
+                            size: 'small',
+                            material: 'standard',
+                            addons: [],
+                            quantity: 1
+                          }
+                          const currentItems = formData.items || selectedOrder.items || []
+                          setFormData({ ...formData, items: [...currentItems, newItem] })
+                        }}
+                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm flex items-center space-x-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>Add Item</span>
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {(formData.items || selectedOrder.items || []).map((item, itemIndex) => (
+                        <div key={item.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-3">
+                          <div className="flex justify-between items-start">
+                            <span className="text-xs font-semibold text-slate-400">Item #{itemIndex + 1}</span>
+                            {(formData.items || selectedOrder.items || []).length > 1 && (
+                              <button
+                                onClick={() => {
+                                  const currentItems = formData.items || selectedOrder.items || []
+                                  const updatedItems = currentItems.filter((_, i) => i !== itemIndex)
+                                  setFormData({ ...formData, items: updatedItems })
+                                }}
+                                className="text-red-400 hover:text-red-300 text-sm"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs font-medium text-slate-300 mb-1">Product Type</label>
+                            <select
+                              value={item.type}
+                              onChange={(e) => {
+                                const currentItems = [...(formData.items || selectedOrder.items || [])]
+                                currentItems[itemIndex] = { ...currentItems[itemIndex], type: e.target.value }
+                                setFormData({ ...formData, items: currentItems })
+                              }}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                            >
+                              {CONFIG.productTypes.map(type => (
+                                <option key={type.id} value={type.id}>
+                                  {type.label} (${type.basePrice})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs font-medium text-slate-300 mb-1">Description</label>
+                            <textarea
+                              value={item.description}
+                              onChange={(e) => {
+                                const currentItems = [...(formData.items || selectedOrder.items || [])]
+                                currentItems[itemIndex] = { ...currentItems[itemIndex], description: e.target.value }
+                                setFormData({ ...formData, items: currentItems })
+                              }}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                              rows="2"
+                              placeholder="Item description..."
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-300 mb-1">Quantity</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity || 1}
+                                onChange={(e) => {
+                                  const currentItems = [...(formData.items || selectedOrder.items || [])]
+                                  currentItems[itemIndex] = { ...currentItems[itemIndex], quantity: parseInt(e.target.value) || 1 }
+                                  setFormData({ ...formData, items: currentItems })
+                                }}
+                                className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-300 mb-1">Size</label>
+                              <select
+                                value={item.size}
+                                onChange={(e) => {
+                                  const currentItems = [...(formData.items || selectedOrder.items || [])]
+                                  currentItems[itemIndex] = { ...currentItems[itemIndex], size: e.target.value }
+                                  setFormData({ ...formData, items: currentItems })
+                                }}
+                                className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                              >
+                                {CONFIG.sizes.map(size => (
+                                  <option key={size.id} value={size.id}>
+                                    {size.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-300 mb-1">Material</label>
+                              <select
+                                value={item.material}
+                                onChange={(e) => {
+                                  const currentItems = [...(formData.items || selectedOrder.items || [])]
+                                  currentItems[itemIndex] = { ...currentItems[itemIndex], material: e.target.value }
+                                  setFormData({ ...formData, items: currentItems })
+                                }}
+                                className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                              >
+                                {CONFIG.materials.map(material => (
+                                  <option key={material.id} value={material.id}>
+                                    {material.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs font-medium text-slate-300 mb-1">Add-ons</label>
+                            <div className="flex flex-wrap gap-1">
+                              {CONFIG.addons.map(addon => (
+                                <label key={addon.id} className="flex items-center space-x-1 px-2 py-1 bg-slate-800 rounded hover:bg-slate-700 cursor-pointer text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={(item.addons || []).includes(addon.id)}
+                                    onChange={(e) => {
+                                      const currentItems = [...(formData.items || selectedOrder.items || [])]
+                                      const currentAddons = currentItems[itemIndex].addons || []
+                                      currentItems[itemIndex] = {
+                                        ...currentItems[itemIndex],
+                                        addons: e.target.checked
+                                          ? [...currentAddons, addon.id]
+                                          : currentAddons.filter(a => a !== addon.id)
+                                      }
+                                      setFormData({ ...formData, items: currentItems })
+                                    }}
+                                    className="w-3 h-3"
+                                  />
+                                  <span className="text-white flex items-center space-x-1"><Icon icon={addon.icon} className="w-3 h-3" /><span>{addon.label}</span></span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {/* Item subtotal */}
+                          <div className="pt-2 border-t border-slate-700">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-400">Item Total:</span>
+                              <span className="text-white font-medium">
+                                {(() => {
+                                  const itemPricing = calculateOrderPricing({
+                                    productType: item.type,
+                                    size: item.size,
+                                    material: item.material,
+                                    addons: item.addons,
+                                    store: formData.store || selectedOrder.store
+                                  })
+                                  const quantity = item.quantity || 1
+                                  return formatMoney(itemPricing.total * quantity)
+                                })()}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Pricing - Auto-calculated from all items */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Total Pricing</span>
+                    </h3>
+                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-2">
+                      {(() => {
+                        const items = formData.items || selectedOrder.items || []
+                        let calculatedTotal = 0
+                        
+                        items.forEach(item => {
+                          const itemPricing = calculateOrderPricing({
+                            productType: item.type,
+                            size: item.size,
+                            material: item.material,
+                            addons: item.addons,
+                            store: formData.store || selectedOrder.store
+                          })
+                          const quantity = item.quantity || 1
+                          calculatedTotal += itemPricing.total * quantity
+                        })
+                        
+                        const paid = selectedOrder.pricing.paid
+                        const newBalance = calculatedTotal - paid
+                        const hasChanges = Math.abs(calculatedTotal - selectedOrder.pricing.total) > 0.01
+                        
+                        return (
+                          <>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-400">Total:</span>
+                              <span className="text-white font-medium">{formatMoney(calculatedTotal)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-400">Paid:</span>
+                              <span className="text-green-400 font-medium">{formatMoney(paid)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm pt-2 border-t border-slate-700">
+                              <span className="text-slate-400">Balance:</span>
+                              <span className={`font-bold ${newBalance > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+                                {formatMoney(newBalance)}
+                              </span>
+                            </div>
+                            {hasChanges && (
+                              <div className="text-xs text-amber-400 pt-2 border-t border-slate-700">
+                                ⚠️ Pricing updated based on changes. Original total: {formatMoney(selectedOrder.pricing.total)}
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Payment History */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="text-sm font-semibold text-slate-300 flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                        <span>Payment History</span>
+                      </h3>
+                      <button
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            showPaymentForm: !formData.showPaymentForm
+                          })
+                        }}
+                        className="px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-xs flex items-center space-x-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>Add Payment</span>
+                      </button>
+                    </div>
+
+                    {/* Add Payment Form */}
+                    {formData.showPaymentForm && (
+                      <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 mb-3 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-slate-300 mb-1">Amount</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={formData.paymentAmount || ''}
+                              onChange={(e) => setFormData({...formData, paymentAmount: e.target.value})}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-300 mb-1">Method</label>
+                            <select
+                              value={formData.paymentMethod || 'stripe'}
+                              onChange={(e) => setFormData({...formData, paymentMethod: e.target.value})}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm"
+                            >
+                              {CONFIG.paymentMethods.map(method => (
+                                <option key={method.id} value={method.id}>
+                                  {method.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-300 mb-1">Notes (optional)</label>
+                          <input
+                            type="text"
+                            value={formData.paymentNotes || ''}
+                            onChange={(e) => setFormData({...formData, paymentNotes: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm"
+                            placeholder="Payment reference or notes"
+                          />
+                        </div>
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => setFormData({...formData, showPaymentForm: false, paymentAmount: '', paymentMethod: '', paymentNotes: ''})}
+                            className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              const amount = parseFloat(formData.paymentAmount)
+                              if (!amount || amount <= 0) {
+                                alert('Please enter a valid payment amount')
+                                return
+                              }
+
+                              const newPayment = {
+                                id: `payment_${Date.now()}`,
+                                amount: amount,
+                                method: formData.paymentMethod || 'stripe',
+                                date: new Date().toISOString(),
+                                notes: formData.paymentNotes || ''
+                              }
+
+                              const currentPayments = selectedOrder.payments || []
+                              const updatedPayments = [...currentPayments, newPayment]
+                              const totalPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0)
+                              
+                              // Recalculate total from items
+                              const items = formData.items || selectedOrder.items || []
+                              let calculatedTotal = 0
+                              items.forEach(item => {
+                                const itemPricing = calculateOrderPricing({
+                                  productType: item.type,
+                                  size: item.size,
+                                  material: item.material,
+                                  addons: item.addons,
+                                  store: formData.store || selectedOrder.store
+                                })
+                                calculatedTotal += itemPricing.total * (item.quantity || 1)
+                              })
+
+                              const updatedOrder = {
+                                ...selectedOrder,
+                                payments: updatedPayments,
+                                pricing: {
+                                  ...selectedOrder.pricing,
+                                  total: calculatedTotal || selectedOrder.pricing.total,
+                                  paid: totalPaid,
+                                  balance: (calculatedTotal || selectedOrder.pricing.total) - totalPaid
+                                },
+                                updatedAt: new Date().toISOString()
+                              }
+
+                              dataManager.orders.save(updatedOrder)
+                              setSelectedOrder(updatedOrder)
+                              setFormData({...formData, showPaymentForm: false, paymentAmount: '', paymentMethod: '', paymentNotes: ''})
+                              loadData()
+                            }}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-xs"
+                          >
+                            Record Payment
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Payment List */}
+                    <div className="bg-slate-800/50 rounded-lg border border-slate-700 max-h-48 overflow-y-auto">
+                      {(!selectedOrder.payments || selectedOrder.payments.length === 0) ? (
+                        <div className="p-4 text-center text-slate-500 text-sm">
+                          No payments recorded yet
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-700">
+                          {selectedOrder.payments.map(payment => {
+                            const method = CONFIG.paymentMethods.find(m => m.id === payment.method)
+                            return (
+                              <div key={payment.id} className="p-3 hover:bg-slate-800/50">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center space-x-2 mb-1">
+                                      <Icon icon={method?.icon} className="w-4 h-4" />
+                                      <span className="text-white font-medium text-sm">{method?.label || payment.method}</span>
+                                      <span className="text-green-400 font-bold text-sm">{formatMoney(payment.amount)}</span>
+                                    </div>
+                                    <div className="text-xs text-slate-400">
+                                      {formatDate(payment.date)}
+                                    </div>
+                                    {payment.notes && (
+                                      <div className="text-xs text-slate-400 mt-1">
+                                        {payment.notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm('Delete this payment record?')) {
+                                        const updatedPayments = selectedOrder.payments.filter(p => p.id !== payment.id)
+                                        const totalPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0)
+                                        
+                                        const updatedOrder = {
+                                          ...selectedOrder,
+                                          payments: updatedPayments,
+                                          pricing: {
+                                            ...selectedOrder.pricing,
+                                            paid: totalPaid,
+                                            balance: selectedOrder.pricing.total - totalPaid
+                                          },
+                                          updatedAt: new Date().toISOString()
+                                        }
+
+                                        dataManager.orders.save(updatedOrder)
+                                        setSelectedOrder(updatedOrder)
+                                        loadData()
+                                      }
+                                    }}
+                                    className="text-red-400 hover:text-red-300 text-xs"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Timeline */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span>Timeline</span>
+                    </h3>
+                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Created:</span>
+                        <span className="text-white">{formatDate(selectedOrder.createdAt)}</span>
+                      </div>
+                      {selectedOrder.dueDate && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-400">Due Date:</span>
+                          <span className="text-white">{formatDate(selectedOrder.dueDate)}</span>
+                        </div>
+                      )}
+                      {selectedOrder.completedAt && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-400">Completed:</span>
+                          <span className="text-green-400">{formatDate(selectedOrder.completedAt)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Store & Priority */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Sales Channel</label>
+                      <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                        <div className="flex items-center space-x-2">
+                          {selectedOrder.store && CONFIG.stores.find(s => s.id === selectedOrder.store) && (
+                            <img 
+                              src={CONFIG.stores.find(s => s.id === selectedOrder.store).icon} 
+                              alt="" 
+                              className="w-4 h-4"
+                            />
+                          )}
+                          <span className="text-white text-sm">
+                            {CONFIG.stores.find(s => s.id === selectedOrder.store)?.label || 'Direct'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Priority</label>
+                      <select
+                        value={formData.priority || selectedOrder.priority}
+                        onChange={(e) => setFormData({...formData, priority: e.target.value})}
+                        className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none text-sm"
+                      >
+                        {CONFIG.priorities.map(priority => (
+                          <option key={priority.id} value={priority.id}>
+                            {priority.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+                    <textarea
+                      value={formData.notes !== undefined ? formData.notes : (selectedOrder.notes || '')}
+                      onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      rows="3"
+                      placeholder="Add notes about this order..."
+                    />
+                  </div>
+                </div>
+                
+                <div className="p-6 border-t border-slate-800 flex justify-between items-center">
+                  <button 
+                    onClick={() => {
+                      if (confirm('Are you sure you want to delete this order?')) {
+                        const updatedOrders = orders.filter(o => o.id !== selectedOrder.id)
+                        localStorage.setItem('anchor_crm_orders', JSON.stringify(updatedOrders))
+                        loadData()
+                        closeModal()
+                      }
+                    }}
+                    className="px-6 py-2 bg-red-600/10 hover:bg-red-600/20 border border-red-600/30 text-red-400 rounded-lg transition-colors"
+                  >
+                    Delete Order
+                  </button>
+                  <div className="flex space-x-3">
+                    <button 
+                      onClick={closeModal}
+                      className="px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleUpdateOrder}
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
             
           </div>
         </div>
@@ -1163,7 +2668,7 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl">
             <div className="p-6 border-b border-slate-800 flex justify-between items-center">
               <h2 className="text-xl font-bold text-white flex items-center space-x-2">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1175,8 +2680,53 @@ function App() {
               <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white text-2xl">×</button>
             </div>
             
+            {/* Tabs */}
+            <div className="flex border-b border-slate-800 px-6">
+              <button
+                onClick={() => setFormData({...formData, settingsTab: 'channels'})}
+                className={`px-4 py-3 font-medium transition-colors border-b-2 ${
+                  (formData.settingsTab || 'channels') === 'channels'
+                    ? 'border-blue-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                🛍️ Sales Channels
+              </button>
+              <button
+                onClick={() => setFormData({...formData, settingsTab: 'workflow'})}
+                className={`px-4 py-3 font-medium transition-colors border-b-2 ${
+                  formData.settingsTab === 'workflow'
+                    ? 'border-blue-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                🎯 Workflow
+              </button>
+              <button
+                onClick={() => setFormData({...formData, settingsTab: 'products'})}
+                className={`px-4 py-3 font-medium transition-colors border-b-2 ${
+                  formData.settingsTab === 'products'
+                    ? 'border-blue-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                📦 Products
+              </button>
+              <button
+                onClick={() => setFormData({...formData, settingsTab: 'invoice'})}
+                className={`px-4 py-3 font-medium transition-colors border-b-2 ${
+                  formData.settingsTab === 'invoice'
+                    ? 'border-blue-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                🧾 Invoice
+              </button>
+            </div>
+            
             <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
-              {/* Store Management Section */}
+              {/* Sales Channels Tab */}
+              {(formData.settingsTab || 'channels') === 'channels' && (
               <div>
                 <h3 className="text-lg font-semibold text-white mb-3 flex items-center space-x-2">
                   <span>🛍️</span>
@@ -1184,43 +2734,607 @@ function App() {
                 </h3>
                 <p className="text-sm text-slate-400 mb-4">Toggle visibility of sales channels in the sidebar and order form</p>
                 <div className="space-y-2">
-                  {CONFIG.stores.map(store => (
-                    <label 
-                      key={store.id}
-                      className="flex items-center justify-between p-3 bg-slate-800 rounded-lg hover:bg-slate-700 cursor-pointer transition-colors"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <input
-                          type="checkbox"
-                          checked={enabledStores.includes(store.id)}
-                          onChange={() => toggleStore(store.id)}
-                          className="w-4 h-4 bg-slate-700 border-slate-600 rounded"
-                        />
-                        <span className="text-lg">{store.icon}</span>
-                        <div>
-                          <div className="text-white font-medium">{store.label}</div>
-                          {store.commission > 0 && (
-                            <div className="text-xs text-slate-400">Commission: {store.commission}%</div>
+                  {CONFIG.stores.map(store => {
+                    const isConnected = connectedStores.includes(store.id)
+                    return (
+                      <div 
+                        key={store.id}
+                        className="p-4 bg-slate-800 rounded-lg transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="flex items-center space-x-3 cursor-pointer flex-1">
+                            <input
+                              type="checkbox"
+                              checked={enabledStores.includes(store.id)}
+                              onChange={() => toggleStore(store.id)}
+                              className="w-4 h-4 bg-slate-700 border-slate-600 rounded"
+                            />
+                            <img src={store.icon} alt={store.label} className="w-5 h-5" />
+                            <div className="flex-1">
+                              <div className="text-white font-medium">{store.label}</div>
+                              {store.commission > 0 && (
+                                <div className="text-xs text-slate-400">Commission: {store.commission}%</div>
+                              )}
+                            </div>
+                          </label>
+                          {store.url && (
+                            <a 
+                              href={store.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 text-sm p-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
                           )}
                         </div>
+                        
+                        {store.id !== 'direct' && store.id !== 'other' && (
+                          <div className="flex items-center justify-between pl-12">
+                            <div className="flex items-center space-x-2">
+                              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-slate-600'}`}></div>
+                              <span className="text-sm text-slate-400">
+                                {isConnected ? 'Connected' : 'Not connected'}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => toggleStoreConnection(store.id)}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                isConnected
+                                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                              }`}
+                            >
+                              {isConnected ? 'Disconnect' : 'Connect'}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {store.url && (
-                        <a 
-                          href={store.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 text-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </a>
-                      )}
-                    </label>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
+              )}
+
+              {/* Workflow Tab */}
+              {formData.settingsTab === 'workflow' && (
+              <div className="border-t border-slate-800 pt-6">
+                <h3 className="text-lg font-semibold text-white mb-3 flex items-center space-x-2">
+                  <span>⚙️</span>
+                  <span>Workflow Configuration</span>
+                </h3>
+                <p className="text-sm text-slate-400 mb-4">Customize order statuses and product settings for your business</p>
+                
+                {/* Order Statuses */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm font-semibold text-slate-300">Order Statuses (Kanban Columns)</h4>
+                    <button
+                      onClick={() => {
+                        const newStatus = {
+                          id: `status_${Date.now()}`,
+                          label: 'New Status',
+                          color: '#64748b',
+                          icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>',
+                          description: 'Custom status'
+                        }
+                        saveCustomConfig({
+                          statuses: [...(customConfig.statuses || CONFIG.statuses), newStatus]
+                        })
+                      }}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {(customConfig.statuses || CONFIG.statuses).map((status, index) => (
+                      <div key={status.id} className="flex items-center space-x-2 p-2 bg-slate-800 rounded">
+                        <input
+                          type="text"
+                          value={status.label}
+                          onChange={(e) => {
+                            const updated = [...(customConfig.statuses || CONFIG.statuses)]
+                            updated[index] = { ...updated[index], label: e.target.value }
+                            saveCustomConfig({ statuses: updated })
+                          }}
+                          className="flex-1 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="Status name"
+                        />
+                        <input
+                          type="color"
+                          value={status.color}
+                          onChange={(e) => {
+                            const updated = [...(customConfig.statuses || CONFIG.statuses)]
+                            updated[index] = { ...updated[index], color: e.target.value }
+                            saveCustomConfig({ statuses: updated })
+                          }}
+                          className="w-10 h-8 bg-slate-700 border border-slate-600 rounded cursor-pointer"
+                        />
+                        <button
+                          onClick={() => {
+                            const updated = (customConfig.statuses || CONFIG.statuses).filter((_, i) => i !== index)
+                            saveCustomConfig({ statuses: updated })
+                          }}
+                          className="text-red-400 hover:text-red-300 p-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              )}
+
+              {/* Products Tab */}
+              {formData.settingsTab === 'products' && (
+              <div>
+                {/* Product Types */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm font-semibold text-slate-300">Product Types</h4>
+                    <button
+                      onClick={() => {
+                        const newType = {
+                          id: `product_${Date.now()}`,
+                          label: 'New Product',
+                          basePrice: 100,
+                          icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>',
+                          category: 'other'
+                        }
+                        saveCustomConfig({
+                          productTypes: [...activeConfig.productTypes, newType]
+                        })
+                      }}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {activeConfig.productTypes.map((type, index) => (
+                      <div key={type.id} className="flex items-center space-x-2 p-2 bg-slate-800 rounded">
+                        <input
+                          type="text"
+                          value={type.icon}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.productTypes]
+                            updated[index] = { ...updated[index], icon: e.target.value }
+                            saveCustomConfig({ productTypes: updated })
+                          }}
+                          className="w-12 p-1 bg-slate-700 border border-slate-600 rounded text-white text-center text-sm"
+                          placeholder="🎨"
+                        />
+                        <input
+                          type="text"
+                          value={type.label}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.productTypes]
+                            updated[index] = { ...updated[index], label: e.target.value }
+                            saveCustomConfig({ productTypes: updated })
+                          }}
+                          className="flex-1 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="Product name"
+                        />
+                        <input
+                          type="number"
+                          value={type.basePrice}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.productTypes]
+                            updated[index] = { ...updated[index], basePrice: parseFloat(e.target.value) || 0 }
+                            saveCustomConfig({ productTypes: updated })
+                          }}
+                          className="w-20 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="Price"
+                        />
+                        <button
+                          onClick={() => {
+                            const updated = activeConfig.productTypes.filter((_, i) => i !== index)
+                            saveCustomConfig({ productTypes: updated })
+                          }}
+                          className="text-red-400 hover:text-red-300 p-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sizes */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm font-semibold text-slate-300">Sizes</h4>
+                    <button
+                      onClick={() => {
+                        const newSize = {
+                          id: `size_${Date.now()}`,
+                          label: 'Custom Size',
+                          priceModifier: 0,
+                          description: ''
+                        }
+                        saveCustomConfig({
+                          sizes: [...activeConfig.sizes, newSize]
+                        })
+                      }}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {activeConfig.sizes.map((size, index) => (
+                      <div key={size.id} className="flex items-center space-x-2 p-2 bg-slate-800 rounded">
+                        <input
+                          type="text"
+                          value={size.label}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.sizes]
+                            updated[index] = { ...updated[index], label: e.target.value }
+                            saveCustomConfig({ sizes: updated })
+                          }}
+                          className="flex-1 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="Size name"
+                        />
+                        <span className="text-slate-400 text-xs">+</span>
+                        <input
+                          type="number"
+                          value={size.priceModifier}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.sizes]
+                            updated[index] = { ...updated[index], priceModifier: parseFloat(e.target.value) || 0 }
+                            saveCustomConfig({ sizes: updated })
+                          }}
+                          className="w-20 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="0"
+                        />
+                        <button
+                          onClick={() => {
+                            const updated = activeConfig.sizes.filter((_, i) => i !== index)
+                            saveCustomConfig({ sizes: updated })
+                          }}
+                          className="text-red-400 hover:text-red-300 p-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Materials */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm font-semibold text-slate-300">Materials</h4>
+                    <button
+                      onClick={() => {
+                        const newMaterial = {
+                          id: `material_${Date.now()}`,
+                          label: 'Custom Material',
+                          priceModifier: 0,
+                          description: ''
+                        }
+                        saveCustomConfig({
+                          materials: [...activeConfig.materials, newMaterial]
+                        })
+                      }}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {activeConfig.materials.map((material, index) => (
+                      <div key={material.id} className="flex items-center space-x-2 p-2 bg-slate-800 rounded">
+                        <input
+                          type="text"
+                          value={material.label}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.materials]
+                            updated[index] = { ...updated[index], label: e.target.value }
+                            saveCustomConfig({ materials: updated })
+                          }}
+                          className="flex-1 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="Material name"
+                        />
+                        <span className="text-slate-400 text-xs">+</span>
+                        <input
+                          type="number"
+                          value={material.priceModifier}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.materials]
+                            updated[index] = { ...updated[index], priceModifier: parseFloat(e.target.value) || 0 }
+                            saveCustomConfig({ materials: updated })
+                          }}
+                          className="w-20 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="0"
+                        />
+                        <button
+                          onClick={() => {
+                            const updated = activeConfig.materials.filter((_, i) => i !== index)
+                            saveCustomConfig({ materials: updated })
+                          }}
+                          className="text-red-400 hover:text-red-300 p-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Add-ons */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm font-semibold text-slate-300">Add-ons</h4>
+                    <button
+                      onClick={() => {
+                        const newAddon = {
+                          id: `addon_${Date.now()}`,
+                          label: 'New Add-on',
+                          price: 0,
+                          icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>'
+                        }
+                        saveCustomConfig({
+                          addons: [...activeConfig.addons, newAddon]
+                        })
+                      }}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {activeConfig.addons.map((addon, index) => (
+                      <div key={addon.id} className="flex items-center space-x-2 p-2 bg-slate-800 rounded">
+                        <input
+                          type="text"
+                          value={addon.icon}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.addons]
+                            updated[index] = { ...updated[index], icon: e.target.value }
+                            saveCustomConfig({ addons: updated })
+                          }}
+                          className="w-12 p-1 bg-slate-700 border border-slate-600 rounded text-white text-center text-sm"
+                          placeholder="🎁"
+                        />
+                        <input
+                          type="text"
+                          value={addon.label}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.addons]
+                            updated[index] = { ...updated[index], label: e.target.value }
+                            saveCustomConfig({ addons: updated })
+                          }}
+                          className="flex-1 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="Add-on name"
+                        />
+                        <input
+                          type="number"
+                          value={addon.price}
+                          onChange={(e) => {
+                            const updated = [...activeConfig.addons]
+                            updated[index] = { ...updated[index], price: parseFloat(e.target.value) || 0 }
+                            saveCustomConfig({ addons: updated })
+                          }}
+                          className="w-20 p-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          placeholder="Price"
+                        />
+                        <button
+                          onClick={() => {
+                            const updated = activeConfig.addons.filter((_, i) => i !== index)
+                            saveCustomConfig({ addons: updated })
+                          }}
+                          className="text-red-400 hover:text-red-300 p-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (confirm('Reset all product configuration to defaults?')) {
+                      setCustomConfig({})
+                      localStorage.removeItem('anchor_crm_custom_config')
+                    }
+                  }}
+                  className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 text-sm"
+                >
+                  Reset to Defaults
+                </button>
+              </div>
+              )}
+
+              {/* Invoice Tab */}
+              {formData.settingsTab === 'invoice' && (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Invoice Customization</h3>
+                <p className="text-sm text-slate-400 mb-6">Customize your invoice appearance and business information</p>
+                
+                {/* Business Information */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Business Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Business Name</label>
+                      <input
+                        type="text"
+                        value={customConfig.invoiceConfig?.businessName || CONFIG.business.name}
+                        onChange={(e) => saveCustomConfig({
+                          invoiceConfig: { ...(customConfig.invoiceConfig || {}), businessName: e.target.value }
+                        })}
+                        className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                        placeholder="Your Business Name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={customConfig.invoiceConfig?.email || CONFIG.business.email}
+                        onChange={(e) => saveCustomConfig({
+                          invoiceConfig: { ...(customConfig.invoiceConfig || {}), email: e.target.value }
+                        })}
+                        className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                        placeholder="email@example.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Phone</label>
+                      <input
+                        type="tel"
+                        value={customConfig.invoiceConfig?.phone || CONFIG.business.phone}
+                        onChange={(e) => saveCustomConfig({
+                          invoiceConfig: { ...(customConfig.invoiceConfig || {}), phone: e.target.value }
+                        })}
+                        className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                        placeholder="+1 (555) 000-0000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Website</label>
+                      <input
+                        type="url"
+                        value={customConfig.invoiceConfig?.website || CONFIG.business.website}
+                        onChange={(e) => saveCustomConfig({
+                          invoiceConfig: { ...(customConfig.invoiceConfig || {}), website: e.target.value }
+                        })}
+                        className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                        placeholder="https://yourwebsite.com"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm text-slate-400 mb-1">Address</label>
+                      <textarea
+                        value={customConfig.invoiceConfig?.address || CONFIG.business.address}
+                        onChange={(e) => saveCustomConfig({
+                          invoiceConfig: { ...(customConfig.invoiceConfig || {}), address: e.target.value }
+                        })}
+                        className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                        rows="2"
+                        placeholder="123 Business St, City, State, ZIP"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Logo */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Company Logo</h4>
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="url"
+                      value={customConfig.invoiceConfig?.logo || ''}
+                      onChange={(e) => saveCustomConfig({
+                        invoiceConfig: { ...(customConfig.invoiceConfig || {}), logo: e.target.value }
+                      })}
+                      className="flex-1 p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                      placeholder="https://yourlogo.com/logo.png or leave blank"
+                    />
+                    {customConfig.invoiceConfig?.logo && (
+                      <img 
+                        src={customConfig.invoiceConfig.logo} 
+                        alt="Logo preview" 
+                        className="h-12 w-auto object-contain bg-white p-1 rounded"
+                        onError={(e) => e.target.style.display = 'none'}
+                      />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Enter a URL to your logo image (PNG, JPG, SVG)</p>
+                </div>
+
+                {/* Invoice Prefix */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Invoice Numbering</h4>
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Invoice Number Prefix</label>
+                    <input
+                      type="text"
+                      value={customConfig.invoiceConfig?.prefix || 'ANC-INV'}
+                      onChange={(e) => saveCustomConfig({
+                        invoiceConfig: { ...(customConfig.invoiceConfig || {}), prefix: e.target.value }
+                      })}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                      placeholder="ANC-INV"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Example: {customConfig.invoiceConfig?.prefix || 'ANC-INV'}-001</p>
+                  </div>
+                </div>
+
+                {/* Invoice Terms */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Terms & Conditions</h4>
+                  <textarea
+                    value={customConfig.invoiceConfig?.terms || 'Payment is due within 30 days of invoice date.\nLate payments may incur additional fees.\nAll sales are final unless otherwise specified.'}
+                    onChange={(e) => saveCustomConfig({
+                      invoiceConfig: { ...(customConfig.invoiceConfig || {}), terms: e.target.value }
+                    })}
+                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                    rows="4"
+                    placeholder="Enter your terms and conditions..."
+                  />
+                </div>
+
+                {/* Payment Instructions */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Payment Instructions</h4>
+                  <textarea
+                    value={customConfig.invoiceConfig?.paymentInstructions || 'Please make payment via bank transfer or credit card.\nContact us for payment assistance.'}
+                    onChange={(e) => saveCustomConfig({
+                      invoiceConfig: { ...(customConfig.invoiceConfig || {}), paymentInstructions: e.target.value }
+                    })}
+                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                    rows="3"
+                    placeholder="Enter payment instructions..."
+                  />
+                </div>
+
+                {/* Invoice Footer */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Invoice Footer</h4>
+                  <input
+                    type="text"
+                    value={customConfig.invoiceConfig?.footer || 'Thank you for your business!'}
+                    onChange={(e) => saveCustomConfig({
+                      invoiceConfig: { ...(customConfig.invoiceConfig || {}), footer: e.target.value }
+                    })}
+                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white"
+                    placeholder="Thank you for your business!"
+                  />
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (confirm('Reset invoice settings to defaults?')) {
+                      const updated = { ...customConfig }
+                      delete updated.invoiceConfig
+                      setCustomConfig(updated)
+                      localStorage.setItem('anchor_crm_custom_config', JSON.stringify(updated))
+                    }
+                  }}
+                  className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 text-sm"
+                >
+                  Reset Invoice Settings
+                </button>
+              </div>
+              )}
 
               {/* Data Management Section */}
               <div className="border-t border-slate-800 pt-6">
