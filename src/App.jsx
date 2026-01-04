@@ -2801,9 +2801,7 @@ function App() {
               setTimelineView={setTimelineView}
               timelineDate={timelineDate}
               setTimelineDate={setTimelineDate}
-              setSelectedOrderId={setSelectedOrderId}
-              setModalType={setModalType}
-              setShowModal={setShowModal}
+              openOrderDetailModal={openOrderDetailModal}
             />
           )}
 
@@ -2812,10 +2810,6 @@ function App() {
             <KanbanView
               orders={orders}
               setOrders={setOrders}
-              setSelectedOrderId={setSelectedOrderId}
-              setModalType={setModalType}
-              setFormData={setFormData}
-              setShowModal={setShowModal}
               openOrderDetailModal={openOrderDetailModal}
               formatMoney={formatMoney}
               getDueDateStatus={getDueDateStatus}

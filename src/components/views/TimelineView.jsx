@@ -6,9 +6,7 @@ const TimelineView = ({
   setTimelineView, 
   timelineDate, 
   setTimelineDate, 
-  setSelectedOrderId, 
-  setModalType, 
-  setShowModal
+  openOrderDetailModal
 }) => {
   return (
     <div>
@@ -276,9 +274,7 @@ const TimelineView = ({
                               transform: `translateY(${orderIdx * 4}px)`
                             }}
                             onClick={() => {
-                              setSelectedOrderId(order.id)
-                              setModalType('orderDetail')
-                              setShowModal(true)
+                              openOrderDetailModal(order)
                             }}
                           >
                             <div className="flex items-center space-x-2 text-white text-sm font-medium truncate">
