@@ -1,8 +1,10 @@
 # CRM Development Roadmap
 
-A comprehensive development plan for building a complete CRM system from landing page to full third-party integration.
+A comprehensive development plan for building a complete business operating system from landing page to full third-party integration.
 
-**Overall Progress: 67% Complete** ██████████████████████░░░░░░░░░░
+**Overall Progress: 70% Complete** ████████████████████████░░░░░░░░
+
+**Vision: The Google Suite for Solo Entrepreneurs & Small Businesses**
 
 ---
 
@@ -418,18 +420,314 @@ A comprehensive development plan for building a complete CRM system from landing
 
 ---
 
-## 📋 Phases 6-21: Future Development
+## � Phase 6: Business Operating System - Quick Wins (IN PROGRESS - 35%)
+████████████░░░░░░░░░░░░░░░░░░░░ 35%
 
-All remaining phases (User Management, Backend, Third-Party Integrations, etc.) are documented below but not yet started. These will be tackled based on business needs and priorities.
+**Goal:** Transform the CRM into a complete business operating system with productivity, organization, and communication tools. **Vision: The Google Suite for solo entrepreneurs.**
+
+### 6.1 Organization & Structure ✅
+**Status:** COMPLETED (100%)
+████████████████████████████████ 100%
+
+**Completed Tasks:**
+- [x] Bids & Proposals module with status tracking (draft, sent, accepted, rejected)
+- [x] Inventory management with stock levels and alerts
+- [x] Calendar view with month grid and upcoming events
+- [x] Receipts scanner (upload documents per order with preview/download)
+- [x] Reorganized sidebar with logical categories:
+  - Workflow (Dashboard, Kanban, Analytics, Calendar)
+  - Orders (with sales channel dropdown)
+  - Clients & Proposals (Clients, Bids)
+  - Financial (Invoices, Timesheets)
+  - Operations (Inventory)
+- [x] Subscription tiers and upgrade page (Free, Pro $29, Business $79)
+- [x] Modal forms for bids, inventory, events
+- [x] localStorage persistence for new modules
+
+**Deliverables:** ✅ Bids module, Inventory system, Calendar, Receipts feature, reorganized navigation
+
+### 6.2 Productivity Suite (IN PROGRESS - 20%)
+**Target:** Complete business task management and automation
+
+**Completed Tasks:**
+- [x] Universal activity tracking (already exists in Phase 5)
+- [x] Task/reminder system in notifications (already exists)
+
+**Remaining Tasks:**
+- [ ] Dedicated Tasks view (separate from notifications)
+- [ ] Task categories and projects
+- [ ] Task priority levels
+- [ ] Recurring tasks
+- [ ] Notes & Documents module (wiki-style editor)
+- [ ] Document categories and folders
+- [ ] Document search and tagging
+- [ ] Rich text editor for notes
+- [ ] Markdown support
+- [ ] Email templates library
+  - [ ] Quote request template
+  - [ ] Invoice payment reminder
+  - [ ] Order confirmation
+  - [ ] Thank you message
+  - [ ] Follow-up templates
+  - [ ] Custom template builder
+- [ ] Quick actions menu (CMD+K command palette)
+- [ ] Keyboard shortcuts system
+- [ ] Bookmarks/Favorites system
+- [ ] Smart filters and saved views
+- [ ] Customizable dashboard widgets
+
+**Why This Matters:** Every business needs task management, note-taking, and email efficiency. These are foundational productivity tools that save hours every week.
+
+**Deliverables:** 
+- Dedicated Tasks view with filtering and organization
+- Document management system with rich editor
+- Email template library with variable insertion
+- Command palette for fast navigation
+- Keyboard shortcut overlay
+- Bookmarks quick access menu
+- Widget customization interface
+
+### 6.3 Financial Management Suite (PLANNED - 0%)
+**Target:** Complete money management tools
+
+**Tasks:**
+- [ ] Expense tracker
+  - [ ] Expense entry form with categories
+  - [ ] Receipt upload integration (reuse receipts scanner)
+  - [ ] Expense categories (travel, supplies, services, etc.)
+  - [ ] Vendor tracking
+  - [ ] Date range filtering
+  - [ ] CSV export
+- [ ] Budget manager
+  - [ ] Budget categories
+  - [ ] Monthly/quarterly/yearly budgets
+  - [ ] Budget vs actual tracking
+  - [ ] Variance alerts
+  - [ ] Visual budget charts
+- [ ] Payment reminders
+  - [ ] Automated overdue invoice detection
+  - [ ] Email reminder scheduling
+  - [ ] Reminder templates
+  - [ ] Payment link generation
+- [ ] Tax calculator
+  - [ ] Quarterly tax estimation
+  - [ ] Tax liability tracking
+  - [ ] Deduction tracking
+  - [ ] Tax report generation
+  - [ ] 1099 preparation support
+- [ ] Financial dashboard
+  - [ ] Profit & loss summary
+  - [ ] Cash flow visualization
+  - [ ] Revenue trends
+  - [ ] Expense breakdown
+  - [ ] Top expenses chart
+  - [ ] Monthly comparison
+
+**Why This Matters:** Solo entrepreneurs need simple but powerful financial tracking without expensive accounting software like QuickBooks.
+
+**Deliverables:**
+- Expense tracking module with categorization
+- Budget interface with variance tracking
+- Automated payment reminder system
+- Tax estimation calculator
+- Financial reports dashboard
+
+### 6.4 Sales & Pipeline (PLANNED - 0%)
+**Target:** Visual sales management and automation
+
+**Tasks:**
+- [ ] Sales pipeline module
+  - [ ] Pipeline stages (Lead, Qualified, Proposal, Negotiation, Won, Lost)
+  - [ ] Drag-and-drop deal cards
+  - [ ] Deal value tracking
+  - [ ] Win probability
+  - [ ] Expected close date
+  - [ ] Stage-specific actions
+- [ ] Quote generator
+  - [ ] Quote templates
+  - [ ] Line item builder
+  - [ ] Pricing tables
+  - [ ] Terms & conditions
+  - [ ] PDF generation
+  - [ ] Email delivery
+  - [ ] Quote versioning
+  - [ ] Acceptance workflow
+- [ ] Lead tracking
+  - [ ] Lead capture form
+  - [ ] Lead source attribution
+  - [ ] Lead scoring
+  - [ ] Follow-up reminders
+  - [ ] Lead nurturing sequences
+  - [ ] Conversion to client
+- [ ] Email campaigns
+  - [ ] Client segmentation
+  - [ ] Campaign builder
+  - [ ] Template selection
+  - [ ] Scheduled sending
+  - [ ] Delivery tracking
+  - [ ] Open/click rates
+- [ ] Referral tracking
+  - [ ] Referral source management
+  - [ ] Referral reporting
+  - [ ] Top referrers list
+  - [ ] Referral rewards tracking
+
+**Why This Matters:** Visual pipeline makes it easy to see where deals are, what needs attention, and forecast revenue.
+
+**Deliverables:**
+- Kanban-style sales pipeline (enhanced version of existing kanban)
+- Quote builder with PDF export
+- Lead management system
+- Campaign manager interface
+- Referral tracking dashboard
+
+### 6.5 Communication & Collaboration (PLANNED - 0%)
+**Target:** Internal team communication and client interaction
+
+**Tasks:**
+- [ ] Team chat
+  - [ ] Channel creation (general, projects, etc.)
+  - [ ] Direct messages
+  - [ ] Real-time updates (localStorage polling initially)
+  - [ ] @mentions
+  - [ ] Message threading
+  - [ ] File attachments
+  - [ ] Emoji reactions
+  - [ ] Message search
+- [ ] Shared notes
+  - [ ] Collaborative editing indicators
+  - [ ] Version history
+  - [ ] Comment threads
+  - [ ] Real-time sync
+- [ ] Team calendar
+  - [ ] Shared calendar view
+  - [ ] User availability
+  - [ ] Meeting scheduling
+  - [ ] Calendar permissions
+  - [ ] Event reminders
+- [ ] Announcements
+  - [ ] Company-wide posts
+  - [ ] Pinned announcements
+  - [ ] Read receipts
+  - [ ] Announcement categories
+- [ ] Activity notifications
+  - [ ] Real-time notification feed
+  - [ ] Email notifications toggle
+  - [ ] Notification preferences
+  - [ ] Grouped notifications
+
+**Why This Matters:** Even solo entrepreneurs grow into teams. Built-in communication prevents tool sprawl (Slack, Teams, etc.).
+
+**Deliverables:**
+- Chat interface with channels
+- Collaborative document editing
+- Team calendar view
+- Announcement system
+- Notification center (enhanced)
+
+### 6.6 Customer Experience (PLANNED - 0%)
+**Target:** Client-facing features and self-service
+
+**Tasks:**
+- [ ] Customer portal
+  - [ ] Client login system
+  - [ ] Order status view
+  - [ ] Invoice access
+  - [ ] Payment history
+  - [ ] Document downloads
+  - [ ] Support ticket submission
+- [ ] Feedback system
+  - [ ] Survey builder
+  - [ ] Feedback forms
+  - [ ] Rating system
+  - [ ] Review collection
+  - [ ] Testimonial display
+  - [ ] NPS tracking
+- [ ] Client communication log
+  - [ ] Email history
+  - [ ] Call logs
+  - [ ] Meeting notes
+  - [ ] Timeline view
+  - [ ] Next action tracking
+- [ ] Automated emails
+  - [ ] Order confirmation auto-send
+  - [ ] Status update emails
+  - [ ] Payment received emails
+  - [ ] Delivery notifications
+  - [ ] Follow-up sequences
+- [ ] Knowledge base
+  - [ ] Article editor
+  - [ ] Categories
+  - [ ] Search functionality
+  - [ ] FAQ section
+  - [ ] Help documentation
+
+**Why This Matters:** Great customer experience leads to referrals and repeat business. Self-service reduces support burden.
+
+**Deliverables:**
+- Customer portal interface
+- Feedback collection system
+- Communication history timeline
+- Automated email workflows
+- Knowledge base editor
+
+### 6.7 Project Management (PLANNED - 0%)
+**Target:** Full project tracking for complex work
+
+**Tasks:**
+- [ ] Projects module
+  - [ ] Project creation from orders
+  - [ ] Project phases/stages
+  - [ ] Task breakdown structure
+  - [ ] Dependencies
+  - [ ] Project templates
+  - [ ] Multiple projects per client
+- [ ] Milestones & deliverables
+  - [ ] Milestone definition
+  - [ ] Deliverable checklist
+  - [ ] Progress tracking
+  - [ ] Client approval workflow
+  - [ ] Milestone payments
+- [ ] Gantt charts
+  - [ ] Timeline visualization
+  - [ ] Drag-to-adjust
+  - [ ] Critical path
+  - [ ] Resource allocation
+- [ ] Resource planning
+  - [ ] Team member assignment
+  - [ ] Workload balancing
+  - [ ] Capacity planning
+  - [ ] Resource utilization reports
+- [ ] Project budgets
+  - [ ] Budget estimation
+  - [ ] Actual vs estimated
+  - [ ] Cost tracking
+  - [ ] Profit margins
+- [ ] Status reports
+  - [ ] Automated report generation
+  - [ ] Client-facing summaries
+  - [ ] Progress dashboards
+  - [ ] Risk indicators
+
+**Why This Matters:** Complex orders (furniture builds, design projects) need project management tools to track phases, materials, and deliverables.
+
+**Deliverables:**
+- Project management interface
+- Gantt chart visualization
+- Resource allocation dashboard
+- Project templates library
+- Status reporting system
+
+**Phase 6 Total Progress:** ████████████░░░░░░░░░░░░░░░░░░░░ 35%
 
 ---
 
-## 🎯 Phase 6: User Management & Settings ✅
+## 🎯 Phase 7: User Management & Settings ✅
 
 **Status:** COMPLETED (100%)
 ████████████████████████████████ 100%
 
-### 6.1 Multi-User Support ✅
+### 7.1 Multi-User Support ✅
 **Status:** COMPLETED (100%)
 ████████████████████████████████ 100%
 
@@ -472,9 +770,9 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 ---
 
-## 🔌 Phase 7: Backend & Database (Optional)
+## 🔌 Phase 8: Backend & Database (Optional)
 
-### 7.1 API Development
+### 8.1 API Development
 **Tasks:**
 - [ ] Choose backend framework (Node.js/Express, Python/FastAPI, etc.)
 - [ ] Set up REST API endpoints
@@ -487,7 +785,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 **Deliverable:** `backend/` or separate repo
 
-### 7.2 Database Setup
+### 8.2 Database Setup
 **Tasks:**
 - [ ] Choose database (PostgreSQL, MongoDB, Supabase, Firebase)
 - [ ] Design database schema
@@ -497,7 +795,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 - [ ] Configure backup system
 - [ ] Implement data validation
 
-### 7.3 Frontend Integration
+### 8.3 Frontend Integration
 **Tasks:**
 - [ ] Replace localStorage with API calls
 - [ ] Implement data fetching (React Query/SWR)
@@ -509,9 +807,9 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 ---
 
-## 🌐 Phase 8: Third-Party Integrations - Payment Processors
+## 🌐 Phase 9: Third-Party Integrations - Payment Processors
 
-### 8.1 Stripe Integration
+### 9.1 Stripe Integration
 **Tasks:**
 - [ ] Set up Stripe account
 - [ ] Install Stripe SDK
@@ -527,7 +825,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 **Documentation:** https://stripe.com/docs/api
 
-### 8.2 PayPal Integration
+### 9.2 PayPal Integration
 **Tasks:**
 - [ ] Set up PayPal business account
 - [ ] Install PayPal SDK
@@ -540,7 +838,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 **Documentation:** https://developer.paypal.com/docs/api/overview/
 
-### 8.3 Square Integration
+### 9.3 Square Integration
 **Tasks:**
 - [ ] Set up Square account
 - [ ] Install Square SDK
@@ -554,9 +852,9 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 ---
 
-## 📧 Phase 9: Third-Party Integrations - Communication
+## 📧 Phase 10: Third-Party Integrations - Communication
 
-### 9.1 Email Integration (SendGrid/Mailgun)
+### 10.1 Email Integration (SendGrid/Mailgun)
 **Tasks:**
 - [ ] Set up email service account
 - [ ] Configure SMTP settings
@@ -573,7 +871,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 - SendGrid: https://docs.sendgrid.com/
 - Mailgun: https://documentation.mailgun.com/
 
-### 9.2 SMS Integration (Twilio)
+### 10.2 SMS Integration (Twilio)
 **Tasks:**
 - [ ] Set up Twilio account
 - [ ] Configure phone number
@@ -587,7 +885,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 **Documentation:** https://www.twilio.com/docs/sms
 
-### 9.3 WhatsApp Business API
+### 10.3 WhatsApp Business API
 **Tasks:**
 - [ ] Set up WhatsApp Business account
 - [ ] Configure messaging templates
@@ -601,9 +899,9 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 ---
 
-## 📅 Phase 10: Third-Party Integrations - Calendar & Scheduling
+## 📅 Phase 11: Third-Party Integrations - Calendar & Scheduling
 
-### 10.1 Google Calendar Integration
+### 11.1 Google Calendar Integration
 **Tasks:**
 - [ ] Set up Google API credentials
 - [ ] Implement OAuth flow
@@ -615,7 +913,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 **Documentation:** https://developers.google.com/calendar/api
 
-### 10.2 Calendly Integration
+### 11.2 Calendly Integration
 **Tasks:**
 - [ ] Set up Calendly account
 - [ ] Configure event types
@@ -628,9 +926,9 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 ---
 
-## 📦 Phase 11: Third-Party Integrations - Shipping & Logistics
+## 📦 Phase 12: Third-Party Integrations - Shipping & Logistics
 
-### 11.1 ShipStation Integration
+### 12.1 ShipStation Integration
 **Tasks:**
 - [ ] Set up ShipStation account
 - [ ] Configure carrier accounts
@@ -642,7 +940,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 **Documentation:** https://www.shipstation.com/docs/api/
 
-### 11.2 EasyPost Integration
+### 12.2 EasyPost Integration
 **Tasks:**
 - [ ] Set up EasyPost account
 - [ ] Get shipping rates
@@ -656,9 +954,9 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 ---
 
-## 💰 Phase 12: Third-Party Integrations - Accounting
+## 💰 Phase 13: Third-Party Integrations - Accounting
 
-### 12.1 QuickBooks Integration
+### 13.1 QuickBooks Integration
 **Tasks:**
 - [ ] Set up QuickBooks developer account
 - [ ] Implement OAuth connection
@@ -671,7 +969,7 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 **Documentation:** https://developer.intuit.com/
 
-### 12.2 Xero Integration
+### 13.2 Xero Integration
 **Tasks:**
 - [ ] Set up Xero account
 - [ ] Configure API access
@@ -685,9 +983,9 @@ All remaining phases (User Management, Backend, Third-Party Integrations, etc.) 
 
 ---
 
-## 📢 Phase 13: Third-Party Integrations - Marketing & CRM
+## 📢 Phase 14: Third-Party Integrations - Marketing & CRM
 
-### 13.1 Mailchimp Integration
+### 14.1 Mailchimp Integration
 **Tasks:**
 - [ ] Set up Mailchimp account
 - [ ] Configure API key
@@ -1065,5 +1363,6 @@ Track these KPIs as you build:
 
 ---
 
-**Last Updated:** January 2, 2026
+**Last Updated:** January 3, 2026
+**Current Focus:** Phase 6 - Business Operating System Quick Wins
 **Version:** 1.0

@@ -38,14 +38,21 @@ function App() {
   const [clients, setClients] = useState([])
   const [bids, setBids] = useState([])
   const [inventory, setInventory] = useState([])
+  const [emailTemplates, setEmailTemplates] = useState([])
+  const [notes, setNotes] = useState([])
   const [stats, setStats] = useState({})
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [modalType, setModalType] = useState(null) // 'newClient', 'newOrder', 'editOrder', etc.
   const [formData, setFormData] = useState({})
   const [showSettings, setShowSettings] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
   const [storeFilter, setStoreFilter] = useState('all')
   const [ordersExpanded, setOrdersExpanded] = useState(true)
+  const [workflowExpanded, setWorkflowExpanded] = useState(true)
+  const [clientsExpanded, setClientsExpanded] = useState(true)
+  const [financialExpanded, setFinancialExpanded] = useState(true)
+  const [operationsExpanded, setOperationsExpanded] = useState(true)
   const [enabledStores, setEnabledStores] = useState(() => {
     const saved = localStorage.getItem('anchor_crm_enabled_stores')
     return saved ? JSON.parse(saved) : CONFIG.stores.filter(s => s.enabled).map(s => s.id)
@@ -71,6 +78,7 @@ function App() {
   const [showTermsModal, setShowTermsModal] = useState(false) // For Terms of Service modal
   const [showPrivacyModal, setShowPrivacyModal] = useState(false) // For Privacy Policy modal // Search results
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isModalFullscreen, setIsModalFullscreen] = useState(false)
   const [showInvoiceEditor, setShowInvoiceEditor] = useState(false)
   const [invoiceData, setInvoiceData] = useState(null)
@@ -81,23 +89,13 @@ function App() {
     return saved ? JSON.parse(saved) : []
   })
   const [showNotifications, setShowNotifications] = useState(false)
-  const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem('anchor_crm_users')
-    if (saved) return JSON.parse(saved)
-    // Create default admin user
-    const defaultAdmin = {
-      id: 'user-1',
-      name: 'Admin User',
-      email: 'admin@anchor.com',
-      password: 'admin123', // In production, this would be hashed
-      role: 'admin',
-      avatar: null,
-      createdAt: new Date().toISOString(),
-      active: true
-    }
-    localStorage.setItem('anchor_crm_users', JSON.stringify([defaultAdmin]))
-    return [defaultAdmin]
+  const [toasts, setToasts] = useState([])
+  const [confirmDialog, setConfirmDialog] = useState(null)
+  const [profileImage, setProfileImage] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_profile_image')
+    return saved || null
   })
+  const [users, setUsers] = useState([])
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('anchor_crm_current_user')
     return saved ? JSON.parse(saved) : null
@@ -148,10 +146,30 @@ function App() {
   // Data management
   const dataManager = useLocalStorage()
   
+  // Toast notification functions
+  const showToast = (message, type = 'info') => {
+    const id = Date.now()
+    const newToast = { id, message, type }
+    setToasts(prev => [...prev, newToast])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(toast => toast.id !== id))
+    }, 4000)
+  }
+
+  const showSuccess = (message) => showToast(message, 'success')
+  const showError = (message) => showToast(message, 'error')
+  const showWarning = (message) => showToast(message, 'warning')
+  const showInfo = (message) => showToast(message, 'info')
+
+  // Confirmation dialog function
+  const showConfirm = (message, onConfirm) => {
+    setConfirmDialog({ message, onConfirm })
+  }
+  
   const saveCustomConfig = (updates) => {
     const newConfig = { ...customConfig, ...updates }
     setCustomConfig(newConfig)
-    localStorage.setItem('anchor_crm_custom_config', JSON.stringify(newConfig))
+    dataManager.customConfig.save(newConfig)
   }
 
   // Initialize data on mount
@@ -170,13 +188,11 @@ function App() {
 
   // Save active timers to localStorage
   useEffect(() => {
-    localStorage.setItem('anchor_crm_active_timers', JSON.stringify(activeTimers))
+    dataManager.activeTimers.save(activeTimers)
   }, [activeTimers])
 
-  // Save users to localStorage
-  useEffect(() => {
-    localStorage.setItem('anchor_crm_users', JSON.stringify(users))
-  }, [users])
+  // Note: Users are saved individually through dataManager when created/updated
+  // No need for a general save useEffect
 
   // Save current user to localStorage
   useEffect(() => {
@@ -192,21 +208,42 @@ function App() {
   const loadData = () => {
     const allOrders = dataManager.orders.getAll()
     const allClients = dataManager.clients.getAll()
+    const allInventory = dataManager.inventory.getAll()
+    const allBids = dataManager.bids.getAll()
+    const allTasks = dataManager.tasks.getAll()
+    const allNotes = dataManager.notes.getAll()
+    const allEmailTemplates = dataManager.emailTemplates.getAll()
+    const allUsers = dataManager.users.getAll()
+    const allActiveTimers = dataManager.activeTimers.get()
+    const allConnectedStores = dataManager.connectedStores.get()
+    const customConfigData = dataManager.customConfig.get()
     const orderStats = dataManager.orders.getStats()
-    
-    // Load bids and inventory from localStorage
-    const savedBids = localStorage.getItem('anchor_crm_bids')
-    const savedInventory = localStorage.getItem('anchor_crm_inventory')
     
     setOrders(allOrders)
     setClients(allClients)
+    setInventory(allInventory)
+    setBids(allBids)
+    setTasks(allTasks)
+    setNotes(allNotes)
+    setEmailTemplates(allEmailTemplates)
+    setUsers(allUsers)
+    setActiveTimers(allActiveTimers)
+    setConnectedStores(allConnectedStores)
+    setCustomConfig(customConfigData)
     setStats(orderStats)
-    setBids(savedBids ? JSON.parse(savedBids) : [])
-    setInventory(savedInventory ? JSON.parse(savedInventory) : [])
     
     console.log('📊 Data loaded:', {
       orders: allOrders.length,
       clients: allClients.length,
+      inventory: allInventory.length,
+      bids: allBids.length,
+      tasks: allTasks.length,
+      notes: allNotes.length,
+      emailTemplates: allEmailTemplates.length,
+      users: allUsers.length,
+      activeTimers: Object.keys(allActiveTimers).length,
+      connectedStores: allConnectedStores.length,
+      customConfig: Object.keys(customConfigData).length > 0 ? 'loaded' : 'empty',
       stats: orderStats
     })
   }
@@ -286,7 +323,7 @@ function App() {
 
   const handleSaveClient = () => {
     if (!formData.name || !formData.email) {
-      alert('Name and email are required')
+      showError('Name and email are required')
       return
     }
     
@@ -297,6 +334,7 @@ function App() {
     
     dataManager.clients.save(newClient)
     loadData()
+    showSuccess('Client saved successfully')
     closeModal()
   }
 
@@ -306,7 +344,7 @@ function App() {
     
     if (formData.isNewClient) {
       if (!formData.clientName || !formData.clientEmail) {
-        alert('Client name and email are required')
+        showError('Client name and email are required')
         return
       }
       
@@ -328,7 +366,7 @@ function App() {
     }
     
     if (!clientId || !formData.productType) {
-      alert('Client and product type are required')
+      showError('Client and product type are required')
       return
     }
     
@@ -472,7 +510,7 @@ function App() {
 
   const handleSaveBid = () => {
     if (!formData.clientId || !formData.items || formData.items.length === 0) {
-      alert('Client and at least one item are required')
+      showError('Client and at least one item are required')
       return
     }
 
@@ -493,7 +531,7 @@ function App() {
 
   const handleSaveInventoryItem = () => {
     if (!formData.name) {
-      alert('Item name is required')
+      showError('Item name is required')
       return
     }
 
@@ -512,13 +550,13 @@ function App() {
 
   const handleSaveEvent = () => {
     if (!formData.title || !formData.date) {
-      alert('Event title and date are required')
+      showError('Event title and date are required')
       return
     }
 
     // Events can be stored with orders or separately
     // For now, just close the modal (implement full calendar later)
-    alert('Calendar event saved!')
+    showSuccess('Calendar event saved!')
     closeModal()
   }
 
@@ -526,13 +564,15 @@ function App() {
   const loadSampleData = () => {
     dataManager.loadSampleData()
     loadData()
+    showSuccess('Sample data loaded successfully!')
   }
 
   const clearAllData = () => {
-    if (confirm('Are you sure you want to clear ALL data? This cannot be undone.')) {
+    showConfirm('Are you sure you want to clear ALL data? This cannot be undone.', () => {
       dataManager.clearAllData()
       loadData()
-    }
+      showSuccess('All data cleared successfully')
+    })
   }
 
   const toggleStore = (storeId) => {
@@ -925,13 +965,14 @@ function App() {
   }
 
   const bulkDelete = () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedOrders.length} order(s)? This cannot be undone.`)) {
+    showConfirm(`Are you sure you want to delete ${selectedOrders.length} order(s)? This cannot be undone.`, () => {
       selectedOrders.forEach(orderId => {
         dataManager.orders.delete(orderId)
       })
       loadData()
       setSelectedOrders([])
-    }
+      showSuccess(`${selectedOrders.length} order(s) deleted successfully`)
+    })
   }
 
   const exportToCSV = (ordersList) => {
@@ -1107,7 +1148,7 @@ function App() {
                   e.preventDefault()
                   const success = handleLogin(authFormData.email, authFormData.password)
                   if (!success) {
-                    alert('Invalid email or password')
+                    showError('Invalid email or password')
                   }
                 }}
                 className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg font-semibold transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transform hover:scale-[1.02]"
@@ -1866,29 +1907,42 @@ function App() {
         />
       )}
 
-      {/* Sidebar - Modern Design */}
-      <aside className={`w-64 bg-slate-900 border-r border-slate-800/50 flex flex-col fixed h-full z-50 transition-transform duration-300 lg:translate-x-0 ${
+      {/* Sidebar - Premium Modern Design */}
+      <aside className={`bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-r border-slate-800/50 flex flex-col fixed h-full z-50 transition-all duration-300 shadow-2xl ${
         mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      } ${
+        sidebarCollapsed ? 'lg:w-20 lg:translate-x-0' : 'lg:w-64 lg:translate-x-0'
       }`}>
         {/* Mobile Close Button */}
         <button
           onClick={() => setMobileMenuOpen(false)}
-          className="lg:hidden absolute top-4 right-4 text-slate-400 hover:text-white z-10"
+          className="lg:hidden absolute top-4 right-4 text-slate-400 hover:text-white z-10 transition-colors"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
 
+        {/* Desktop Toggle Button */}
+        <button
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          className="hidden lg:flex absolute -right-3 top-8 w-6 h-6 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-full items-center justify-center text-slate-400 hover:text-white transition-all z-10 shadow-lg"
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <svg className={`w-3 h-3 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
         {/* Logo Section */}
-        <div className="p-6 border-b border-slate-800/50">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center font-bold text-lg">
+        <div className={`p-6 border-b border-slate-800/50 bg-gradient-to-br from-blue-600/5 to-purple-600/5 transition-all ${sidebarCollapsed ? 'lg:p-3' : ''}`}>
+          <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-blue-600 to-purple-600 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg shadow-blue-500/20 flex-shrink-0">
               ⚓
             </div>
-            <div>
-              <div className="text-lg font-bold text-white">ANCHOR</div>
-              <div className="text-xs text-slate-500">CRM Dashboard</div>
+            <div className={`${sidebarCollapsed ? 'lg:hidden' : ''}`}>
+              <div className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">ANCHOR</div>
+              <div className="text-xs text-slate-400 font-medium">CRM Dashboard</div>
             </div>
           </div>
         </div>
@@ -1896,10 +1950,23 @@ function App() {
         {/* Navigation */}
         <nav className="flex-1 p-3 overflow-y-auto">
           {/* Workflow Section */}
-          <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Workflow
-          </div>
+          {!sidebarCollapsed && (
+          <button
+            onClick={() => setWorkflowExpanded(!workflowExpanded)}
+            className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
+          >
+            <span>Workflow</span>
+            <svg
+              className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${workflowExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          )}
           
+          {(workflowExpanded || sidebarCollapsed) && (
           <div className="space-y-1 mb-6">
             {/* Dashboard */}
             <button
@@ -1907,16 +1974,22 @@ function App() {
                 setCurrentView('dashboard')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group relative ${
                 currentView === 'dashboard'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Dashboard" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              <span className="font-medium text-sm">Dashboard</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'dashboard' ? 'text-white' : 'text-blue-400 group-hover:text-blue-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Dashboard</span>
+              </div>
+              {currentView === 'dashboard' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
 
             {/* Kanban */}
@@ -1925,16 +1998,22 @@ function App() {
                 setCurrentView('kanban')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                 currentView === 'kanban'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Kanban Board" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-              </svg>
-              <span className="font-medium text-sm">Kanban Board</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'kanban' ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Kanban Board</span>
+              </div>
+              {currentView === 'kanban' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
 
             {/* Analytics */}
@@ -1943,16 +2022,22 @@ function App() {
                 setCurrentView('analytics')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                 currentView === 'analytics'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Analytics" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <span className="font-medium text-sm">Analytics</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'analytics' ? 'text-white' : 'text-green-400 group-hover:text-green-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Analytics</span>
+              </div>
+              {currentView === 'analytics' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
 
             {/* Calendar */}
@@ -1961,24 +2046,116 @@ function App() {
                 setCurrentView('calendar')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                 currentView === 'calendar'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Calendar" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span className="font-medium text-sm">Calendar</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'calendar' ? 'text-white' : 'text-pink-400 group-hover:text-pink-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Calendar</span>
+              </div>
+              {currentView === 'calendar' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
+
+            {/* Tasks */}
+            <button
+              onClick={() => {
+                setCurrentView('tasks')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'tasks'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Tasks" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'tasks' ? 'text-white' : 'text-orange-400 group-hover:text-orange-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Tasks</span>
+              </div>
+              {currentView === 'tasks' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
+
+            {/* Notes */}
+            <button
+              onClick={() => {
+                setCurrentView('notes')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'notes'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Notes" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'notes' ? 'text-white' : 'text-yellow-400 group-hover:text-yellow-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Notes</span>
+              </div>
+              {currentView === 'notes' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
+
+            {/* Email Templates */}
+            <button
+              onClick={() => {
+                setCurrentView('emailTemplates')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'emailTemplates'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Email Templates" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'emailTemplates' ? 'text-white' : 'text-cyan-400 group-hover:text-cyan-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Email Templates</span>
+              </div>
+              {currentView === 'emailTemplates' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
           </div>
+          )}
 
           {/* Orders Section */}
-          <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Orders
-          </div>
+          {!sidebarCollapsed && (
+          <button
+            onClick={() => setOrdersExpanded(!ordersExpanded)}
+            className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
+          >
+            <span>Orders</span>
+            <svg
+              className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${ordersExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          )}
           
+          {(ordersExpanded || sidebarCollapsed) && (
           <div className="space-y-1 mb-6">
             {/* Orders with Dropdown */}
             <div>
@@ -1988,31 +2165,35 @@ function App() {
                   setStoreFilter('all')
                   setOrdersExpanded(!ordersExpanded)
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${
+                className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                   currentView === 'orders'
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                    : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
                 }`}
+                title={sidebarCollapsed ? "Orders" : ""}
               >
-                <div className="flex items-center space-x-3">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                  <svg className={`w-5 h-5 ${currentView === 'orders' ? 'text-white' : 'text-indigo-400 group-hover:text-indigo-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
-                  <span className="font-medium text-sm">Orders</span>
+                  <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Orders</span>
                 </div>
+                {!sidebarCollapsed && (
                 <svg 
-                  className={`w-4 h-4 transition-transform ${ordersExpanded ? 'rotate-180' : ''}`}
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
+                  className={`w-3.5 h-3.5 transition-transform ${
+                    ordersExpanded ? 'rotate-180 text-blue-400' : 'text-slate-600'
+                  }`}
+                  fill="currentColor" 
+                  viewBox="0 0 20 20"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
+                )}
               </button>
               
               {/* Sales Channels Submenu */}
-              {ordersExpanded && (
-                <div className="mt-1 ml-8 space-y-1 border-l-2 border-slate-800 pl-3">
+              {ordersExpanded && !sidebarCollapsed && (
+                <div className="mt-2 ml-8 space-y-1 border-l-2 border-blue-500/20 pl-3">
                   <button
                     onClick={() => {
                       setCurrentView('orders')
@@ -2020,12 +2201,14 @@ function App() {
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all ${
                       storeFilter === 'all'
-                        ? 'bg-slate-800 text-white'
+                        ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white font-medium'
                         : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'
                     }`}
                   >
                     <span>All Orders</span>
-                    <span className="text-xs opacity-60">{orders.length}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                      storeFilter === 'all' ? 'bg-blue-500/20 text-blue-400' : 'opacity-60'
+                    }`}>{orders.length}</span>
                   </button>
                   
                   {CONFIG.stores
@@ -2041,15 +2224,17 @@ function App() {
                           }}
                           className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all ${
                             storeFilter === store.id
-                              ? 'bg-slate-800 text-white'
+                              ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white font-medium'
                               : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'
                           }`}
                         >
                           <div className="flex items-center space-x-2 min-w-0 flex-1">
-                            <img src={store.icon} alt={store.label} className="w-3.5 h-3.5 flex-shrink-0" />
+                            <img src={store.icon} alt={store.label} className="w-4 h-4 flex-shrink-0 opacity-80" />
                             <span className="truncate text-xs">{store.label}</span>
                           </div>
-                          <span className="text-xs opacity-60 ml-2 flex-shrink-0">{storeOrders.length}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ml-2 flex-shrink-0 ${
+                            storeFilter === store.id ? 'bg-blue-500/20 text-blue-400' : 'opacity-60'
+                          }`}>{storeOrders.length}</span>
                         </button>
                       )
                     })}
@@ -2057,12 +2242,26 @@ function App() {
               )}
             </div>
           </div>
+          )}
 
           {/* Clients & Proposals Section */}
-          <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Clients & Proposals
-          </div>
+          {!sidebarCollapsed && (
+          <button
+            onClick={() => setClientsExpanded(!clientsExpanded)}
+            className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
+          >
+            <span>Clients & Proposals</span>
+            <svg
+              className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${clientsExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          )}
           
+          {(clientsExpanded || sidebarCollapsed) && (
           <div className="space-y-1 mb-6">
             {/* Clients */}
             <button
@@ -2070,16 +2269,22 @@ function App() {
                 setCurrentView('clients')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                 currentView === 'clients'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Clients" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-              <span className="font-medium text-sm">Clients</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'clients' ? 'text-white' : 'text-emerald-400 group-hover:text-emerald-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Clients</span>
+              </div>
+              {currentView === 'clients' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
 
             {/* Bids */}
@@ -2088,24 +2293,44 @@ function App() {
                 setCurrentView('bids')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                 currentView === 'bids'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Bids" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-              <span className="font-medium text-sm">Bids</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'bids' ? 'text-white' : 'text-amber-400 group-hover:text-amber-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Bids</span>
+              </div>
+              {currentView === 'bids' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
           </div>
+          )}
 
           {/* Financial Section */}
-          <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Financial
-          </div>
+          {!sidebarCollapsed && (
+          <button
+            onClick={() => setFinancialExpanded(!financialExpanded)}
+            className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
+          >
+            <span>Financial</span>
+            <svg
+              className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${financialExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          )}
           
+          {(financialExpanded || sidebarCollapsed) && (
           <div className="space-y-1 mb-6">
             {/* Invoices */}
             <button
@@ -2113,16 +2338,22 @@ function App() {
                 setCurrentView('invoices')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                 currentView === 'invoices'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Invoices" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span className="font-medium text-sm">Invoices</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'invoices' ? 'text-white' : 'text-teal-400 group-hover:text-teal-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Invoices</span>
+              </div>
+              {currentView === 'invoices' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
 
             {/* Timesheets */}
@@ -2131,24 +2362,44 @@ function App() {
                 setCurrentView('timesheets')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                 currentView === 'timesheets'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Timesheets" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="font-medium text-sm">Timesheets</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'timesheets' ? 'text-white' : 'text-rose-400 group-hover:text-rose-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Timesheets</span>
+              </div>
+              {currentView === 'timesheets' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
           </div>
+          )}
 
           {/* Operations Section */}
-          <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Operations
-          </div>
+          {!sidebarCollapsed && (
+          <button
+            onClick={() => setOperationsExpanded(!operationsExpanded)}
+            className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
+          >
+            <span>Operations</span>
+            <svg
+              className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${operationsExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          )}
           
+          {(operationsExpanded || sidebarCollapsed) && (
           <div className="space-y-1 mb-6">
             {/* Inventory */}
             <button
@@ -2156,52 +2407,48 @@ function App() {
                 setCurrentView('inventory')
                 setMobileMenuOpen(false)
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
                 currentView === 'inventory'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
               }`}
+              title={sidebarCollapsed ? "Inventory" : ""}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              <span className="font-medium text-sm">Inventory</span>
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'inventory' ? 'text-white' : 'text-violet-400 group-hover:text-violet-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Inventory</span>
+              </div>
+              {currentView === 'inventory' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
             </button>
           </div>
+          )}
         </nav>
 
         {/* Settings Section at Bottom */}
-        <div className="p-3 border-t border-slate-800/50 space-y-1">
-          {/* Upgrade Button - Highlighted */}
-          <button
-            onClick={() => {
-              setCurrentView('upgrade')
-              setMobileMenuOpen(false)
-            }}
-            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white transition-all group shadow-lg shadow-purple-500/20"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <span className="font-medium text-sm">Upgrade to Pro</span>
-          </button>
-          
+        <div className="p-3 border-t border-slate-800/50 space-y-2 bg-gradient-to-b from-transparent to-slate-950/50">
           <button
             onClick={() => {
               setCurrentView('settings')
               setMobileMenuOpen(false)
             }}
-            className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+            className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
               currentView === 'settings'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                ? 'bg-gradient-to-r from-slate-700 to-slate-600 text-white shadow-lg shadow-slate-600/20'
+                : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
             }`}
+            title={sidebarCollapsed ? "Settings" : ""}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <span className="font-medium text-sm">Settings</span>
+            <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+              <svg className={`w-5 h-5 ${currentView === 'settings' ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Settings</span>
+            </div>
           </button>
           
           {/* Logout Button */}
@@ -2210,40 +2457,179 @@ function App() {
               handleLogout()
               setMobileMenuOpen(false)
             }}
-            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-red-900/20 hover:text-red-400 transition-all group"
+            className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'space-x-3 px-3'} py-2.5 rounded-xl text-slate-400 hover:bg-gradient-to-r hover:from-red-900/30 hover:to-red-800/20 hover:text-red-400 transition-all group border border-transparent hover:border-red-900/30`}
+            title={sidebarCollapsed ? "Logout" : ""}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 group-hover:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            <span className="font-medium text-sm">Logout</span>
+            <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Logout</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 lg:ml-64 w-full">
+      <div className={`flex-1 w-full transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         {/* Header Bar */}
         <header className="bg-slate-900/50 backdrop-blur-md border-b border-slate-800 p-4 sticky top-0 z-40">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
-            <div className="flex items-center w-full lg:w-auto">
+          <div className="flex justify-between items-center gap-3">
+            <div className="flex items-center min-w-0">
               {/* Mobile Menu Button */}
               <button
                 onClick={() => setMobileMenuOpen(true)}
-                className="lg:hidden text-white mr-3"
+                className="lg:hidden text-white mr-3 flex-shrink-0"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
               
-              <div className="flex-1">
-                <h1 className="text-lg lg:text-xl font-bold text-white capitalize">{currentView}</h1>
-                <p className="text-xs lg:text-sm text-slate-400 hidden sm:block">{CONFIG.business.tagline}</p>
+              <div className="min-w-0">
+                <h1 className="text-base lg:text-xl font-bold text-white capitalize truncate">{currentView}</h1>
+                <p className="text-xs text-slate-400 hidden xl:block truncate">{CONFIG.business.tagline}</p>
               </div>
             </div>
 
-            {/* Global Search Bar & Notifications */}
-            <div className="w-full lg:w-auto flex items-center gap-3">
+            {/* Top Right: Search, Buttons, Notifications, User */}
+            <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+              {/* Global Search Bar */}
+              <div className="w-64 lg:w-72 relative hidden sm:block">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search orders, clients..."
+                  value={globalSearch}
+                  onChange={(e) => {
+                    setGlobalSearch(e.target.value)
+                    performGlobalSearch(e.target.value)
+                  }}
+                  onFocus={() => {
+                    if (globalSearch.trim().length >= 2) {
+                      performGlobalSearch(globalSearch)
+                    }
+                  }}
+                  onBlur={() => {
+                    // Delay to allow clicking on results
+                    setTimeout(() => setSearchResults(prev => ({ ...prev, visible: false })), 200)
+                  }}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                />
+                <svg className="w-5 h-5 text-slate-500 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {globalSearch && (
+                  <button
+                    onClick={() => {
+                      setGlobalSearch('')
+                      setSearchResults({ orders: [], clients: [], visible: false })
+                    }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Search Results Dropdown */}
+              {searchResults.visible && (searchResults.orders.length > 0 || searchResults.clients.length > 0) && (
+                <div className="absolute top-full mt-14 right-0 w-96 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-96 overflow-y-auto z-50">
+                  {/* Orders */}
+                  {searchResults.orders.length > 0 && (
+                    <div className="p-2">
+                      <div className="text-xs font-semibold text-slate-400 px-3 py-2">ORDERS</div>
+                      {searchResults.orders.map(order => {
+                        const client = clients.find(c => c.id === order.clientId)
+                        const status = activeConfig.statuses.find(s => s.id === order.status)
+                        return (
+                          <button
+                            key={order.id}
+                            onClick={() => {
+                              openOrderDetailModal(order)
+                              setGlobalSearch('')
+                              setSearchResults({ orders: [], clients: [], visible: false })
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-slate-800 rounded-lg transition-colors"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-white">{order.orderNumber}</div>
+                                <div className="text-xs text-slate-400">{client?.name || 'Unknown Client'}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs px-2 py-1 rounded" style={{ backgroundColor: status?.color + '20', color: status?.color }}>
+                                  {status?.label}
+                                </div>
+                                <div className="text-xs text-green-400 font-medium mt-1">
+                                  {formatMoney(order.pricing?.total || 0)}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Clients */}
+                  {searchResults.clients.length > 0 && (
+                    <div className="p-2 border-t border-slate-800">
+                      <div className="text-xs font-semibold text-slate-400 px-3 py-2">CLIENTS</div>
+                      {searchResults.clients.map(client => {
+                        const clientOrders = orders.filter(o => o.clientId === client.id)
+                        return (
+                          <button
+                            key={client.id}
+                            onClick={() => {
+                              setCurrentView('clients')
+                              setGlobalSearch('')
+                              setSearchResults({ orders: [], clients: [], visible: false })
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-slate-800 rounded-lg transition-colors"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-white">{client.name}</div>
+                                <div className="text-xs text-slate-400">{client.email || client.phone}</div>
+                              </div>
+                              <div className="text-xs text-slate-400">
+                                {clientOrders.length} order{clientOrders.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              </div>
+
+              {/* New Client Button */}
+              <button 
+                onClick={openNewClientModal}
+                className="px-3 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm transition-colors flex items-center space-x-2 whitespace-nowrap"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="hidden md:inline">New Client</span>
+                <span className="md:hidden">+</span>
+              </button>
+
+              {/* New Order Button */}
+              <button 
+                onClick={openNewOrderModal}
+                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors flex items-center space-x-2 whitespace-nowrap"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden md:inline">New Order</span>
+                <span className="md:hidden">+</span>
+              </button>
+
               {/* Notification Bell */}
               <div className="relative">
                 <button
@@ -2329,131 +2715,25 @@ function App() {
                 )}
               </div>
 
-              {/* Global Search Bar */}
-              <div className="flex-1 lg:w-96 relative">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search orders, clients..."
-                  value={globalSearch}
-                  onChange={(e) => {
-                    setGlobalSearch(e.target.value)
-                    performGlobalSearch(e.target.value)
-                  }}
-                  onFocus={() => {
-                    if (globalSearch.trim().length >= 2) {
-                      performGlobalSearch(globalSearch)
-                    }
-                  }}
-                  onBlur={() => {
-                    // Delay to allow clicking on results
-                    setTimeout(() => setSearchResults(prev => ({ ...prev, visible: false })), 200)
-                  }}
-                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
-                />
-                <svg className="w-5 h-5 text-slate-500 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                {globalSearch && (
-                  <button
-                    onClick={() => {
-                      setGlobalSearch('')
-                      setSearchResults({ orders: [], clients: [], visible: false })
-                    }}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-
-              {/* Search Results Dropdown */}
-              {searchResults.visible && (searchResults.orders.length > 0 || searchResults.clients.length > 0) && (
-                <div className="absolute top-full mt-2 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-2xl max-h-96 overflow-y-auto z-50">
-                  {/* Orders */}
-                  {searchResults.orders.length > 0 && (
-                    <div className="p-2">
-                      <div className="text-xs font-semibold text-slate-400 px-3 py-2">ORDERS</div>
-                      {searchResults.orders.map(order => {
-                        const client = clients.find(c => c.id === order.clientId)
-                        const status = activeConfig.statuses.find(s => s.id === order.status)
-                        return (
-                          <button
-                            key={order.id}
-                            onClick={() => {
-                              openOrderDetailModal(order)
-                              setGlobalSearch('')
-                              setSearchResults({ orders: [], clients: [], visible: false })
-                            }}
-                            className="w-full text-left px-3 py-2 hover:bg-slate-800 rounded-lg transition-colors"
-                          >
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="text-sm font-medium text-white">{order.orderNumber}</div>
-                                <div className="text-xs text-slate-400">{client?.name || 'Unknown Client'}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-xs px-2 py-1 rounded" style={{ backgroundColor: status?.color + '20', color: status?.color }}>
-                                  {status?.label}
-                                </div>
-                                <div className="text-xs text-green-400 font-medium mt-1">
-                                  {formatMoney(order.pricing?.total || 0)}
-                                </div>
-                              </div>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {/* Clients */}
-                  {searchResults.clients.length > 0 && (
-                    <div className="p-2 border-t border-slate-800">
-                      <div className="text-xs font-semibold text-slate-400 px-3 py-2">CLIENTS</div>
-                      {searchResults.clients.map(client => {
-                        const clientOrders = orders.filter(o => o.clientId === client.id)
-                        return (
-                          <button
-                            key={client.id}
-                            onClick={() => {
-                              setCurrentView('clients')
-                              setGlobalSearch('')
-                              setSearchResults({ orders: [], clients: [], visible: false })
-                            }}
-                            className="w-full text-left px-3 py-2 hover:bg-slate-800 rounded-lg transition-colors"
-                          >
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="text-sm font-medium text-white">{client.name}</div>
-                                <div className="text-xs text-slate-400">{client.email || client.phone}</div>
-                              </div>
-                              <div className="text-xs text-slate-400">
-                                {clientOrders.length} order{clientOrders.length !== 1 ? 's' : ''}
-                              </div>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-              </div>
-
               {/* User Profile Dropdown */}
               {currentUser && (
                 <div className="relative">
                   <button
-                    onClick={() => setShowSettings(!showSettings)}
+                    onClick={() => setShowUserMenu(!showUserMenu)}
                     className="flex items-center space-x-2 p-2 hover:bg-slate-800 rounded-lg transition-colors"
                   >
                     <div className="relative">
-                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                        {currentUser.name.charAt(0).toUpperCase()}
-                      </div>
+                      {profileImage ? (
+                        <img 
+                          src={profileImage} 
+                          alt="Profile" 
+                          className="w-8 h-8 rounded-full object-cover border-2 border-slate-700"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                          {currentUser.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       {/* Online Status Indicator */}
                       <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full"></div>
                     </div>
@@ -2464,26 +2744,80 @@ function App() {
                   </button>
 
                   {/* User Dropdown Menu */}
-                  {showSettings && (
-                    <div className="absolute top-full right-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50">
-                      <div className="p-3 border-b border-slate-800">
-                        <p className="text-white font-medium">{currentUser.name}</p>
-                        <p className="text-xs text-slate-400">{currentUser.email}</p>
-                        <p className="text-xs text-blue-400 mt-1 capitalize">{currentUser.role}</p>
+                  {showUserMenu && (
+                    <div className="absolute top-full right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50">
+                      {/* User Info Header */}
+                      <div className="p-4 border-b border-slate-800 bg-gradient-to-br from-blue-600/10 to-purple-600/10">
+                        <div className="flex items-center space-x-3">
+                          <div className="relative group">
+                            {profileImage ? (
+                              <img 
+                                src={profileImage} 
+                                alt="Profile" 
+                                className="w-12 h-12 rounded-full object-cover border-2 border-slate-700 shadow-lg"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                {currentUser.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-slate-900 rounded-full"></div>
+                            <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files[0]
+                                  if (file) {
+                                    const reader = new FileReader()
+                                    reader.onloadend = () => {
+                                      setProfileImage(reader.result)
+                                      localStorage.setItem('anchor_crm_profile_image', reader.result)
+                                    }
+                                    reader.readAsDataURL(file)
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-semibold truncate">{currentUser.name}</p>
+                            <p className="text-xs text-slate-400 truncate">{currentUser.email}</p>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400 capitalize">
+                                {currentUser.role}
+                              </span>
+                              <span className="inline-flex items-center space-x-1 text-xs text-green-400">
+                                <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                                <span>Online</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       
                       {/* Online Users List */}
                       <div className="p-3 border-b border-slate-800">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Team Online</p>
-                        <div className="space-y-2">
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center space-x-2">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          <span>Team ({users.length})</span>
+                        </p>
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
                           {users.map(user => (
-                            <div key={user.id} className="flex items-center space-x-2">
+                            <div key={user.id} className="flex items-center space-x-2 p-1.5 rounded hover:bg-slate-800/50 transition-colors">
                               <div className="relative">
-                                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
                                   {user.name.charAt(0).toUpperCase()}
                                 </div>
                                 {/* Status indicators - green (online), yellow (away), hollow (offline) */}
-                                <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 border border-slate-900 rounded-full ${
+                                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-slate-900 rounded-full ${
                                   user.id === currentUser.id ? 'bg-green-500' : 
                                   Math.random() > 0.5 ? 'bg-green-500' : 
                                   Math.random() > 0.3 ? 'bg-yellow-500' : 
@@ -2492,49 +2826,80 @@ function App() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-white truncate">{user.name}</p>
+                                <p className="text-xs text-slate-500 truncate">{user.role}</p>
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
                       
+                      {/* Profile Actions */}
                       <div className="p-2">
-                        <button
-                          onClick={() => {
-                            setCurrentView('settings')
-                            setShowSettings(false)
-                          }}
-                          className="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <span className="text-sm">Settings</span>
-                        </button>
-                        
                         <button
                           onClick={() => {
                             setShowUserModal(true)
                             setEditingUser(currentUser)
-                            setShowSettings(false)
+                            setShowUserMenu(false)
                           }}
                           className="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
-                          <span className="text-sm">My Profile</span>
+                          <span className="text-sm">Edit Profile</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => {
+                            // TODO: Add account settings functionality
+                            setShowUserMenu(false)
+                          }}
+                          className="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                          </svg>
+                          <span className="text-sm">Change Password</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => {
+                            // TODO: Add preferences functionality
+                            setShowUserMenu(false)
+                          }}
+                          className="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                          </svg>
+                          <span className="text-sm">Preferences</span>
                         </button>
                       </div>
 
+                      {/* Upgrade to Pro */}
+                      <div className="p-2 border-t border-slate-800">
+                        <button
+                          onClick={() => {
+                            setCurrentView('upgrade')
+                            setShowUserMenu(false)
+                          }}
+                          className="w-full text-left px-3 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center space-x-2 shadow-lg shadow-purple-500/20"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          <span className="text-sm font-semibold">Upgrade to Pro</span>
+                        </button>
+                      </div>
+
+                      {/* Logout */}
                       <div className="p-2 border-t border-slate-800">
                         <button
                           onClick={() => {
                             handleLogout()
-                            setShowSettings(false)
+                            setShowUserMenu(false)
                           }}
-                          className="w-full text-left px-3 py-2 text-red-400 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
+                          className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors flex items-center space-x-2"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -2546,29 +2911,6 @@ function App() {
                   )}
                 </div>
               )}
-            </div>
-
-            <div className="flex space-x-2 lg:space-x-3">
-              <button 
-                onClick={openNewClientModal}
-                className="px-3 lg:px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm transition-colors flex items-center space-x-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span className="hidden sm:inline">New Client</span>
-                <span className="sm:hidden">+</span>
-              </button>
-              <button 
-                onClick={openNewOrderModal}
-                className="px-3 lg:px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors flex items-center space-x-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span className="hidden sm:inline">New Order</span>
-                <span className="sm:hidden">+</span>
-              </button>
             </div>
           </div>
         </header>
@@ -4002,12 +4344,14 @@ function App() {
                                 </button>
                                 <button
                                   onClick={() => {
-                                    if (confirm(`Are you sure you want to delete ${user.name}?`)) {
+                                    showConfirm(`Are you sure you want to delete ${user.name}?`, () => {
                                       const success = deleteUser(user.id)
                                       if (!success) {
-                                        alert('Cannot delete user. Must have at least one admin.')
+                                        showWarning('Cannot delete user. Must have at least one admin.')
+                                      } else {
+                                        showSuccess('User deleted successfully')
                                       }
-                                    }
+                                    })
                                   }}
                                   className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                                   title="Delete user"
@@ -4263,6 +4607,190 @@ function App() {
                 </div>
                 )}
 
+                {/* Store Integrations - Admin Only */}
+                {hasPermission('manageSettings') && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-4">Store Integrations</h3>
+                    <p className="text-slate-400 text-sm mb-4">Connect your sales channels to sync orders automatically</p>
+                    <div className="space-y-3">
+                      {CONFIG.stores.map(store => (
+                        <label key={store.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                          <div className="flex items-center space-x-3">
+                            <img src={store.icon} alt={store.label} className="w-8 h-8" />
+                            <div>
+                              <div className="text-white font-medium">{store.label}</div>
+                              <div className="text-sm text-slate-400">
+                                {connectedStores.includes(store.id) ? 'Connected' : 'Not connected'}
+                              </div>
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={enabledStores.includes(store.id)}
+                            onChange={(e) => {
+                              const newEnabledStores = e.target.checked
+                                ? [...enabledStores, store.id]
+                                : enabledStores.filter(id => id !== store.id)
+                              setEnabledStores(newEnabledStores)
+                              localStorage.setItem('anchor_crm_enabled_stores', JSON.stringify(newEnabledStores))
+                            }}
+                            className="w-5 h-5 text-blue-600 rounded"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Appearance & Display */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4">Appearance & Display</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Theme</label>
+                      <select
+                        defaultValue="dark"
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="dark">Dark Mode</option>
+                        <option value="light">Light Mode (Coming Soon)</option>
+                        <option value="auto">Auto (System Default)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Date Format</label>
+                      <select
+                        defaultValue="MM/DD/YYYY"
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                        <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                        <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Time Format</label>
+                      <select
+                        defaultValue="12h"
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="12h">12 Hour (AM/PM)</option>
+                        <option value="24h">24 Hour</option>
+                      </select>
+                    </div>
+                    <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                      <div>
+                        <div className="text-white font-medium">Compact View</div>
+                        <div className="text-sm text-slate-400">Use a more compact layout for lists and tables</div>
+                      </div>
+                      <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Email & Communication */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4">Email & Communication</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Default Email Signature</label>
+                      <textarea
+                        rows="3"
+                        placeholder="Best regards,&#10;Your Name&#10;Your Business"
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                      <div>
+                        <div className="text-white font-medium">Auto-send Invoice Emails</div>
+                        <div className="text-sm text-slate-400">Automatically email invoices to clients</div>
+                      </div>
+                      <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" />
+                    </label>
+                    <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                      <div>
+                        <div className="text-white font-medium">CC Yourself on Emails</div>
+                        <div className="text-sm text-slate-400">Receive copies of emails sent to clients</div>
+                      </div>
+                      <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Default Settings */}
+                {hasPermission('manageSettings') && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-4">Default Settings</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-slate-300 mb-2 text-sm">Default Order Status</label>
+                        <select
+                          defaultValue="pending"
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in-progress">In Progress</option>
+                          <option value="ready">Ready</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-2 text-sm">Default Priority</label>
+                        <select
+                          defaultValue="normal"
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="low">Low</option>
+                          <option value="normal">Normal</option>
+                          <option value="high">High</option>
+                          <option value="urgent">Urgent</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-2 text-sm">Invoice Due Days</label>
+                        <input
+                          type="number"
+                          defaultValue="30"
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-2 text-sm">Auto-Archive After (days)</label>
+                        <input
+                          type="number"
+                          defaultValue="90"
+                          placeholder="0 = never"
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Data & Privacy */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4">Data & Privacy</h3>
+                  <div className="space-y-3">
+                    <button className="w-full text-left px-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-white transition-colors flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">Export All Data</div>
+                        <div className="text-sm text-slate-400">Download all your data in JSON format</div>
+                      </div>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                    <button className="w-full text-left px-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-white transition-colors flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">Clear Cache</div>
+                        <div className="text-sm text-slate-400">Clear local cache and temporary data</div>
+                      </div>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
                 {/* User Management - Admin Only */}
                 {hasPermission('manageUsers') && (
                   <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -4347,12 +4875,301 @@ function App() {
                   </div>
                 )}
 
-                {/* Save Button - Admin Only */}
+                {/* Product/Service Types Management - Admin Only */}
                 {hasPermission('manageSettings') && (
-                  <div className="flex justify-end">
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-white">Product/Service Types</h3>
+                        <p className="text-sm text-slate-400 mt-1">Manage available product and service types</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const newType = {
+                            id: `product_${Date.now()}`,
+                            label: 'New Product/Service',
+                            basePrice: 0,
+                            icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'/></svg>",
+                            category: 'custom'
+                          }
+                          const updated = [...activeConfig.productTypes, newType]
+                          const newConfig = {...customConfig, productTypes: updated}
+                          setCustomConfig(newConfig)
+                          dataManager.customConfig.save(newConfig)
+                        }}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Add New</span>
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {activeConfig.productTypes.map((type, index) => (
+                        <div key={type.id} className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <input
+                              type="text"
+                              value={type.label}
+                              onChange={(e) => {
+                                const updated = [...activeConfig.productTypes]
+                                updated[index] = {...updated[index], label: e.target.value}
+                                const newConfig = {...customConfig, productTypes: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                              }}
+                              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                              placeholder="Product/Service Name"
+                            />
+                            <input
+                              type="number"
+                              value={type.basePrice}
+                              onChange={(e) => {
+                                const updated = [...activeConfig.productTypes]
+                                updated[index] = {...updated[index], basePrice: parseFloat(e.target.value) || 0}
+                                const newConfig = {...customConfig, productTypes: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                              }}
+                              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                              placeholder="Base Price"
+                            />
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-slate-400 whitespace-nowrap">Base: ${type.basePrice}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              showConfirm(`Delete "${type.label}"? This cannot be undone.`, () => {
+                                const updated = activeConfig.productTypes.filter((_, i) => i !== index)
+                                const newConfig = {...customConfig, productTypes: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                                showSuccess('Product type deleted')
+                              })
+                            }}
+                            className="flex-shrink-0 p-2 text-red-400 hover:bg-red-900/30 hover:text-red-300 rounded-lg transition-colors group"
+                            title="Delete this product/service type"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Materials Management - Admin Only */}
+                {hasPermission('manageSettings') && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-white">Materials Management</h3>
+                        <p className="text-sm text-slate-400 mt-1">Manage available materials and their pricing</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const newMaterial = {
+                            id: `material_${Date.now()}`,
+                            label: 'New Material',
+                            priceModifier: 0,
+                            description: ''
+                          }
+                          const updated = [...(activeConfig.materials || CONFIG.materials), newMaterial]
+                          const newConfig = {...customConfig, materials: updated}
+                          setCustomConfig(newConfig)
+                          dataManager.customConfig.save(newConfig)
+                        }}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Add New</span>
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {(activeConfig.materials || CONFIG.materials).map((material, index) => (
+                        <div key={material.id} className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <input
+                              type="text"
+                              value={material.label}
+                              onChange={(e) => {
+                                const updated = [...(activeConfig.materials || CONFIG.materials)]
+                                updated[index] = {...updated[index], label: e.target.value}
+                                const newConfig = {...customConfig, materials: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                              }}
+                              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                              placeholder="Material Name"
+                            />
+                            <input
+                              type="number"
+                              value={material.priceModifier}
+                              onChange={(e) => {
+                                const updated = [...(activeConfig.materials || CONFIG.materials)]
+                                updated[index] = {...updated[index], priceModifier: parseFloat(e.target.value) || 0}
+                                const newConfig = {...customConfig, materials: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                              }}
+                              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                              placeholder="Price Modifier"
+                            />
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-slate-400 whitespace-nowrap">+${material.priceModifier}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              showConfirm(`Delete "${material.label}"? This cannot be undone.`, () => {
+                                const updated = (activeConfig.materials || CONFIG.materials).filter((_, i) => i !== index)
+                                const newConfig = {...customConfig, materials: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                                showSuccess('Material deleted')
+                              })
+                            }}
+                            className="flex-shrink-0 p-2 text-red-400 hover:bg-red-900/30 hover:text-red-300 rounded-lg transition-colors group"
+                            title="Delete this material"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Add-ons Management - Admin Only */}
+                {hasPermission('manageSettings') && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-white">Add-ons Management</h3>
+                        <p className="text-sm text-slate-400 mt-1">Manage available add-ons for orders</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const newAddon = {
+                            id: `addon_${Date.now()}`,
+                            label: 'New Add-on',
+                            price: 0,
+                            icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M12 6v6m0 0v6m0-6h6m-6 0H6'/></svg>"
+                          }
+                          const updated = [...(activeConfig.addons || CONFIG.addons), newAddon]
+                          const newConfig = {...customConfig, addons: updated}
+                          setCustomConfig(newConfig)
+                          dataManager.customConfig.save(newConfig)
+                        }}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Add New</span>
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {(activeConfig.addons || CONFIG.addons).map((addon, index) => (
+                        <div key={addon.id} className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <input
+                              type="text"
+                              value={addon.label}
+                              onChange={(e) => {
+                                const updated = [...activeConfig.addons]
+                                updated[index] = {...updated[index], label: e.target.value}
+                                const newConfig = {...customConfig, addons: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                              }}
+                              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                              placeholder="Add-on Name"
+                            />
+                            <input
+                              type="number"
+                              value={addon.price}
+                              onChange={(e) => {
+                                const updated = [...activeConfig.addons]
+                                updated[index] = {...updated[index], price: parseFloat(e.target.value) || 0}
+                                const newConfig = {...customConfig, addons: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                              }}
+                              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                              placeholder="Price"
+                            />
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-slate-400 whitespace-nowrap">Price: ${addon.price}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              showConfirm(`Delete "${addon.label}"? This cannot be undone.`, () => {
+                                const updated = activeConfig.addons.filter((_, i) => i !== index)
+                                const newConfig = {...customConfig, addons: updated}
+                                setCustomConfig(newConfig)
+                                dataManager.customConfig.save(newConfig)
+                                showSuccess('Add-on deleted')
+                              })
+                            }}
+                            className="flex-shrink-0 p-2 text-red-400 hover:bg-red-900/30 hover:text-red-300 rounded-lg transition-colors group"
+                            title="Delete this add-on"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons - Admin Only */}
+                {hasPermission('manageSettings') && (
+                  <div className="flex justify-between items-center gap-4">
+                    {/* Data Management Buttons */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => {
+                          showConfirm('This will load comprehensive sample data:\n\n• 7 Sample Orders\n• 6 Sample Clients\n• 20 Inventory Items\n• 4 Bids/Quotes\n• 6 Tasks\n• 5 Notes\n• 5 Email Templates\n• 3 Users (Admin, Manager, Staff)\n• Custom Products, Materials & Add-ons\n• Connected Stores\n\nContinue?', () => {
+                            loadSampleData()
+                          })
+                        }}
+                        className="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center space-x-2"
+                        title="Load comprehensive sample data for visual demoing"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span>Upload Sample Data</span>
+                      </button>
+                      
+                      <button
+                        onClick={clearAllData}
+                        className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center space-x-2"
+                        title="Clear all CRM data"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span>Clear Sample Data</span>
+                      </button>
+                    </div>
+
+                    {/* Save Settings Button */}
                     <button
                       onClick={() => {
-                        alert('Settings saved successfully!')
+                        showSuccess('Settings saved successfully!')
                       }}
                       className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2"
                     >
@@ -4509,7 +5326,7 @@ function App() {
                   </ul>
 
                   <button
-                    onClick={() => alert('Stripe integration coming soon! This will redirect to checkout.')}
+                    onClick={() => showInfo('Stripe integration coming soon! This will redirect to checkout.')}
                     className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg font-semibold transition-all shadow-lg shadow-purple-500/50"
                   >
                     Upgrade to Pro
@@ -4586,7 +5403,7 @@ function App() {
                   </ul>
 
                   <button
-                    onClick={() => alert('Stripe integration coming soon! This will redirect to checkout.')}
+                    onClick={() => showInfo('Stripe integration coming soon! This will redirect to checkout.')}
                     className="w-full py-3 px-4 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-lg font-semibold transition-all"
                   >
                     Upgrade to Business
@@ -5429,6 +6246,416 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* Tasks View */}
+          {currentView === 'tasks' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Tasks</h2>
+                  <p className="text-slate-400">Manage your to-do list and action items</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setModalType('newTask')
+                    setFormData({
+                      title: '',
+                      description: '',
+                      priority: 'medium',
+                      status: 'pending',
+                      dueDate: '',
+                      category: 'general'
+                    })
+                    setShowModal(true)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>New Task</span>
+                </button>
+              </div>
+
+              {/* Task Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-slate-400 text-sm mb-1">Total Tasks</p>
+                  <p className="text-2xl font-bold text-white">{tasks.length}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-slate-400 text-sm mb-1">Pending</p>
+                  <p className="text-2xl font-bold text-yellow-400">
+                    {tasks.filter(t => t.status === 'pending').length}
+                  </p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-slate-400 text-sm mb-1">Completed</p>
+                  <p className="text-2xl font-bold text-green-400">
+                    {tasks.filter(t => t.status === 'completed').length}
+                  </p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-slate-400 text-sm mb-1">Overdue</p>
+                  <p className="text-2xl font-bold text-red-400">
+                    {tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed').length}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tasks List */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                {tasks.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">No tasks yet</h3>
+                    <p className="text-slate-400 mb-4">Create your first task to get organized</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-800">
+                    {tasks.map(task => {
+                      const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed'
+                      return (
+                        <div key={task.id} className="p-4 hover:bg-slate-800/30 transition-colors">
+                          <div className="flex items-start space-x-3">
+                            <button
+                              onClick={() => {
+                                const updatedTasks = tasks.map(t =>
+                                  t.id === task.id
+                                    ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' }
+                                    : t
+                                )
+                                setTasks(updatedTasks)
+                                localStorage.setItem('anchor_crm_tasks', JSON.stringify(updatedTasks))
+                              }}
+                              className={`mt-1 flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                task.status === 'completed'
+                                  ? 'bg-green-600 border-green-600'
+                                  : 'border-slate-600 hover:border-blue-500'
+                              }`}
+                            >
+                              {task.status === 'completed' && (
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <h3 className={`font-semibold ${
+                                  task.status === 'completed' ? 'text-slate-500 line-through' : 'text-white'
+                                }`}>
+                                  {task.title}
+                                </h3>
+                                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                  task.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                                  task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                  'bg-green-500/20 text-green-400'
+                                }`}>
+                                  {task.priority}
+                                </span>
+                                {task.category && (
+                                  <span className="px-2 py-0.5 bg-slate-700 text-slate-300 rounded text-xs">
+                                    {task.category}
+                                  </span>
+                                )}
+                              </div>
+                              {task.description && (
+                                <p className="text-slate-400 text-sm mb-2">{task.description}</p>
+                              )}
+                              {task.linkedOrderId && (() => {
+                                const linkedOrder = orders.find(o => o.id === task.linkedOrderId)
+                                const linkedClient = linkedOrder ? clients.find(c => c.id === linkedOrder.clientId) : null
+                                return linkedOrder ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      openOrderDetailModal(linkedOrder)
+                                    }}
+                                    className="inline-flex items-center space-x-1 text-xs text-blue-400 hover:text-blue-300 mb-2"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                    </svg>
+                                    <span>{linkedOrder.orderNumber} - {linkedClient?.name}</span>
+                                  </button>
+                                ) : null
+                              })()}
+                              <div className="flex items-center space-x-3 text-xs text-slate-500">
+                                {task.dueDate && (
+                                  <span className={isOverdue ? 'text-red-400 font-semibold' : ''}>
+                                    Due: {new Date(task.dueDate).toLocaleDateString()}
+                                  </span>
+                                )}
+                                <span>Created: {new Date(task.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                showConfirm('Delete this task?', () => {
+                                  const updatedTasks = tasks.filter(t => t.id !== task.id)
+                                  setTasks(updatedTasks)
+                                  localStorage.setItem('anchor_crm_tasks', JSON.stringify(updatedTasks))
+                                  showSuccess('Task deleted successfully')
+                                })
+                              }}
+                              className="text-slate-500 hover:text-red-400 transition-colors"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Notes View */}
+          {currentView === 'notes' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Notes & Documents</h2>
+                  <p className="text-slate-400">Store important information and documentation</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setModalType('newNote')
+                    setFormData({
+                      title: '',
+                      content: '',
+                      category: 'general',
+                      tags: []
+                    })
+                    setShowModal(true)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>New Note</span>
+                </button>
+              </div>
+
+              {/* Notes Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {notes.length === 0 ? (
+                  <div className="col-span-full bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
+                    <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">No notes yet</h3>
+                    <p className="text-slate-400 mb-4">Create your first note to start documenting</p>
+                  </div>
+                ) : (
+                  notes.map(note => (
+                    <div
+                      key={note.id}
+                      className="bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-slate-700 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setModalType('editNote')
+                        setFormData(note)
+                        setShowModal(true)
+                      }}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="font-semibold text-white text-lg">{note.title}</h3>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            showConfirm('Delete this note?', () => {
+                              dataManager.notes.remove(note.id)
+                              setNotes(notes.filter(n => n.id !== note.id))
+                              showSuccess('Note deleted successfully')
+                            })
+                          }}
+                          className="text-slate-500 hover:text-red-400 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                      <p className="text-slate-400 text-sm mb-3 line-clamp-3">
+                        {note.content}
+                      </p>
+                      {(note.linkedOrderId || note.linkedClientId) && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {note.linkedOrderId && (() => {
+                            const linkedOrder = orders.find(o => o.id === note.linkedOrderId)
+                            return linkedOrder ? (
+                              <span className="inline-flex items-center space-x-1 text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>{linkedOrder.orderNumber}</span>
+                              </span>
+                            ) : null
+                          })()}
+                          {note.linkedClientId && (() => {
+                            const linkedClient = clients.find(c => c.id === note.linkedClientId)
+                            return linkedClient ? (
+                              <span className="inline-flex items-center space-x-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                <span>{linkedClient.name}</span>
+                              </span>
+                            ) : null
+                          })()}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span className="px-2 py-1 bg-slate-800 rounded">{note.category}</span>
+                        <span>{new Date(note.updatedAt || note.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Email Templates View */}
+          {currentView === 'emailTemplates' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Email Templates</h2>
+                  <p className="text-slate-400">Pre-written templates to speed up communication</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setModalType('newEmailTemplate')
+                    setFormData({
+                      name: '',
+                      subject: '',
+                      body: '',
+                      category: 'general'
+                    })
+                    setShowModal(true)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>New Template</span>
+                </button>
+              </div>
+
+              {/* Templates List */}
+              <div className="space-y-4">
+                {emailTemplates.length === 0 ? (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
+                    <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">No email templates yet</h3>
+                    <p className="text-slate-400 mb-4">Create templates to save time on common emails</p>
+                  </div>
+                ) : (
+                  emailTemplates.map(template => (
+                    <div
+                      key={template.id}
+                      className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <h3 className="text-xl font-semibold text-white">{template.name}</h3>
+                            <span className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs">
+                              {template.category}
+                            </span>
+                          </div>
+                          <p className="text-blue-400 text-sm font-medium mb-3">{template.subject}</p>
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => {
+                              setModalType('previewEmailTemplate')
+                              setFormData(template)
+                              setShowModal(true)
+                            }}
+                            className="text-slate-400 hover:text-purple-400 transition-colors"
+                            title="Preview template"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setModalType('editEmailTemplate')
+                              setFormData(template)
+                              setShowModal(true)
+                            }}
+                            className="text-slate-400 hover:text-blue-400 transition-colors"
+                            title="Edit template"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => {
+                              showConfirm('Delete this template?', () => {
+                                dataManager.emailTemplates.remove(template.id)
+                                setEmailTemplates(emailTemplates.filter(t => t.id !== template.id))
+                                showSuccess('Template deleted successfully')
+                              })
+                            }}
+                            className="text-slate-400 hover:text-red-400 transition-colors"
+                            title="Delete template"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div className="bg-slate-800/50 rounded-lg p-4">
+                        <p className="text-slate-300 text-sm whitespace-pre-wrap">{template.body}</p>
+                      </div>
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="text-xs text-slate-500">
+                          Last updated: {new Date(template.updatedAt || template.createdAt).toLocaleDateString()}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setModalType('useEmailTemplate')
+                            setFormData({ ...template, selectedOrderId: '', selectedClientId: '' })
+                            setShowModal(true)
+                          }}
+                          className="text-blue-400 hover:text-blue-300 text-sm font-medium flex items-center space-x-1"
+                        >
+                          <span>Use Template</span>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
@@ -5658,14 +6885,41 @@ function App() {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Product/Service Type *</label>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-medium text-slate-300">Product/Service Type *</label>
+                      <button
+                        onClick={() => {
+                          const name = prompt('Enter product/service name:')
+                          const basePrice = prompt('Enter base price:', '0')
+                          if (name) {
+                            const newType = {
+                              id: `custom_${Date.now()}`,
+                              label: name,
+                              basePrice: parseFloat(basePrice) || 0,
+                              icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M12 6v6m0 0v6m0-6h6m-6 0H6'/></svg>",
+                              category: 'custom'
+                            }
+                            const updated = [...activeConfig.productTypes, newType]
+                            setCustomConfig({...customConfig, productTypes: updated})
+                            localStorage.setItem('anchor_crm_custom_config', JSON.stringify({...customConfig, productTypes: updated}))
+                            setFormData({...formData, productType: newType.id})
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center space-x-1 text-xs"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Quick Add</span>
+                      </button>
+                    </div>
                     <select
                       value={formData.productType || ''}
                       onChange={(e) => setFormData({...formData, productType: e.target.value})}
                       className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
                     >
                       <option value="">Select product type...</option>
-                      {CONFIG.productTypes.map(type => (
+                      {activeConfig.productTypes.map(type => (
                         <option key={type.id} value={type.id}>
                           {type.label} (Base: ${type.basePrice})
                         </option>
@@ -5701,13 +6955,40 @@ function App() {
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Material</label>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm font-medium text-slate-300">Material</label>
+                        <button
+                          onClick={() => {
+                            const name = prompt('Enter material name:')
+                            const priceModifier = prompt('Enter price modifier:', '0')
+                            const description = prompt('Enter description (optional):')
+                            if (name) {
+                              const newMaterial = {
+                                id: `material_${Date.now()}`,
+                                label: name,
+                                priceModifier: parseFloat(priceModifier) || 0,
+                                description: description || ''
+                              }
+                              const updated = [...(activeConfig.materials || CONFIG.materials), newMaterial]
+                              setCustomConfig({...customConfig, materials: updated})
+                              localStorage.setItem('anchor_crm_custom_config', JSON.stringify({...customConfig, materials: updated}))
+                              setFormData({...formData, material: newMaterial.id})
+                            }
+                          }}
+                          className="px-2 py-1 bg-green-600 hover:bg-green-700 rounded transition-colors text-xs"
+                          title="Add new material"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                        </button>
+                      </div>
                       <select
                         value={formData.material || 'standard'}
                         onChange={(e) => setFormData({...formData, material: e.target.value})}
                         className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
                       >
-                        {CONFIG.materials.map(material => (
+                        {(activeConfig.materials || CONFIG.materials).map(material => (
                           <option key={material.id} value={material.id}>
                             {material.label} (+${material.priceModifier})
                           </option>
@@ -5717,10 +6998,36 @@ function App() {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Add-ons</label>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-medium text-slate-300">Add-ons</label>
+                      <button
+                        onClick={() => {
+                          const name = prompt('Enter add-on name:')
+                          const price = prompt('Enter price:', '0')
+                          if (name) {
+                            const newAddon = {
+                              id: `addon_${Date.now()}`,
+                              label: name,
+                              price: parseFloat(price) || 0,
+                              icon: "<svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M12 6v6m0 0v6m0-6h6m-6 0H6'/></svg>"
+                            }
+                            const updated = [...(activeConfig.addons || CONFIG.addons), newAddon]
+                            setCustomConfig({...customConfig, addons: updated})
+                            localStorage.setItem('anchor_crm_custom_config', JSON.stringify({...customConfig, addons: updated}))
+                            setFormData({...formData, addons: [...(formData.addons || []), newAddon.id]})
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center space-x-1 text-xs"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Quick Add</span>
+                      </button>
+                    </div>
                     <div className="space-y-2">
-                      {CONFIG.addons.map(addon => (
-                        <label key={addon.id} className="flex items-center space-x-3 p-3 bg-slate-800 rounded-lg hover:bg-slate-700 cursor-pointer">
+                      {(activeConfig.addons || CONFIG.addons).map(addon => (
+                        <label key={addon.id} className="flex items-center space-x-3 p-3 bg-slate-800 rounded-lg hover:bg-slate-700 cursor-pointer transition-colors">
                           <input
                             type="checkbox"
                             checked={(formData.addons || []).includes(addon.id)}
@@ -5735,7 +7042,7 @@ function App() {
                             }}
                             className="w-4 h-4 bg-slate-700 border-slate-600 rounded"
                           />
-                          <span className="flex-1 text-white flex items-center space-x-2"><Icon icon={addon.icon} className="w-4 h-4" /><span>{addon.label}</span></span>
+                          <span className="flex-1 text-white">{addon.label}</span>
                           <span className="text-green-400 font-medium">${addon.price}</span>
                         </label>
                       ))}
@@ -6000,7 +7307,7 @@ function App() {
                           });
                           setShowInvoiceEditor(true);
                         } else {
-                          alert('Client information not found');
+                          showError('Client information not found');
                         }
                       }}
                       className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-white text-sm flex items-center space-x-1"
@@ -6017,7 +7324,7 @@ function App() {
                         if (client) {
                           previewInvoice(selectedOrder, client);
                         } else {
-                          alert('Client information not found');
+                          showError('Client information not found');
                         }
                       }}
                       className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-white text-sm flex items-center space-x-1"
@@ -6095,7 +7402,7 @@ function App() {
                           setInvoiceData(clonedInvoice);
                           setShowInvoiceEditor(true);
                         } else {
-                          alert('Client information not found');
+                          showError('Client information not found');
                         }
                       }}
                       className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white text-sm flex items-center space-x-1"
@@ -6512,9 +7819,10 @@ function App() {
                                 <span className="text-slate-300 font-medium">{entry.description}</span>
                                 <button
                                   onClick={() => {
-                                    if (confirm('Delete this time entry?')) {
+                                    showConfirm('Delete this time entry?', () => {
                                       deleteTimeEntry(selectedOrder.id, entry.id)
-                                    }
+                                      showSuccess('Time entry deleted')
+                                    })
                                   }}
                                   className="text-slate-500 hover:text-red-400 transition-colors"
                                 >
@@ -6610,7 +7918,7 @@ function App() {
                             onClick={() => {
                               const amount = parseFloat(formData.paymentAmount)
                               if (!amount || amount <= 0) {
-                                alert('Please enter a valid payment amount')
+                                showError('Please enter a valid payment amount')
                                 return
                               }
 
@@ -6715,7 +8023,7 @@ function App() {
                                   </div>
                                   <button
                                     onClick={() => {
-                                      if (confirm('Delete this payment record?')) {
+                                      showConfirm('Delete this payment record?', () => {
                                         const updatedPayments = selectedOrder.payments.filter(p => p.id !== payment.id)
                                         const totalPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0)
                                         
@@ -6733,7 +8041,8 @@ function App() {
                                         dataManager.orders.save(updatedOrder)
                                         setSelectedOrder(updatedOrder)
                                         loadData()
-                                      }
+                                        showSuccess('Payment deleted')
+                                      })
                                     }}
                                     className="text-red-400 hover:text-red-300 text-xs"
                                   >
@@ -6839,11 +8148,11 @@ function App() {
                         
                         for (const file of files) {
                           if (!fileHelpers.isValidFileType(file)) {
-                            alert(`${file.name}: Invalid file type. Allowed: images, PDFs, docs`)
+                            showError(`${file.name}: Invalid file type. Allowed: images, PDFs, docs`)
                             continue
                           }
                           if (!fileHelpers.isValidFileSize(file, 5)) {
-                            alert(`${file.name}: File too large. Max size: 5MB`)
+                            showError(`${file.name}: File too large. Max size: 5MB`)
                             continue
                           }
                           
@@ -6872,11 +8181,11 @@ function App() {
                           
                           for (const file of files) {
                             if (!fileHelpers.isValidFileType(file)) {
-                              alert(`${file.name}: Invalid file type`)
+                              showError(`${file.name}: Invalid file type`)
                               continue
                             }
                             if (!fileHelpers.isValidFileSize(file, 5)) {
-                              alert(`${file.name}: File too large (max 5MB)`)
+                              showError(`${file.name}: File too large (max 5MB)`)
                               continue
                             }
                             
@@ -6956,7 +8265,7 @@ function App() {
                               </button>
                               <button
                                 onClick={() => {
-                                  if (confirm('Delete this file?')) {
+                                  showConfirm('Delete this file?', () => {
                                     const updatedFiles = selectedOrder.files.filter(f => f.id !== file.id)
                                     const updatedOrder = {
                                       ...selectedOrder,
@@ -6966,7 +8275,8 @@ function App() {
                                     dataManager.orders.save(updatedOrder)
                                     setSelectedOrder(updatedOrder)
                                     loadData()
-                                  }
+                                    showSuccess('File deleted')
+                                  })
                                 }}
                                 className="p-2 hover:bg-red-600/20 rounded text-red-400 hover:text-red-300 transition-colors"
                                 title="Delete"
@@ -7092,11 +8402,12 @@ function App() {
                                 </div>
                                 <button
                                   onClick={() => {
-                                    if (confirm('Delete this comment?')) {
+                                    showConfirm('Delete this comment?', () => {
                                       deleteComment(selectedOrder.id, comment.id)
                                       const updatedOrder = orders.find(o => o.id === selectedOrder.id)
                                       if (updatedOrder) setSelectedOrder(updatedOrder)
-                                    }
+                                      showSuccess('Comment deleted')
+                                    })
                                   }}
                                   className="p-1 hover:bg-red-600/20 rounded text-red-400"
                                 >
@@ -7257,7 +8568,7 @@ function App() {
                                 </a>
                                 <button
                                   onClick={() => {
-                                    if (confirm('Delete this receipt?')) {
+                                    showConfirm('Delete this receipt?', () => {
                                       const updatedReceipts = selectedOrder.receipts.filter(r => r.id !== receipt.id)
                                       const updatedOrder = {
                                         ...selectedOrder,
@@ -7270,7 +8581,8 @@ function App() {
                                       )
                                       setOrders(updatedOrders)
                                       dataManager.saveOrders(updatedOrders)
-                                    }
+                                      showSuccess('Receipt deleted')
+                                    })
                                   }}
                                   className="p-1.5 text-red-400 hover:bg-red-500/20 rounded transition-colors"
                                   title="Delete"
@@ -7294,8 +8606,160 @@ function App() {
                       )}
                     </div>
 
+                    {/* Linked Items (Tasks, Notes, Templates) */}
+                    <div className="border-t border-slate-800 pt-4">
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                        <span>Linked Items</span>
+                      </h3>
+
+                      <div className="space-y-3">
+                        {/* Linked Tasks */}
+                        {(() => {
+                          const linkedTasks = tasks.filter(t => t.linkedOrderId === selectedOrder.id)
+                          return linkedTasks.length > 0 ? (
+                            <div>
+                              <p className="text-xs text-slate-400 mb-2 flex items-center space-x-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                </svg>
+                                <span>Tasks ({linkedTasks.length})</span>
+                              </p>
+                              <div className="space-y-2">
+                                {linkedTasks.map(task => (
+                                  <button
+                                    key={task.id}
+                                    onClick={() => {
+                                      closeModal()
+                                      setTimeout(() => {
+                                        setCurrentView('tasks')
+                                      }, 100)
+                                    }}
+                                    className="w-full text-left p-2 bg-slate-800/30 hover:bg-slate-800/50 rounded-lg border border-slate-700/50 transition-colors"
+                                  >
+                                    <div className="flex items-center space-x-2">
+                                      <div className={`w-4 h-4 rounded border-2 flex-shrink-0 ${
+                                        task.status === 'completed' ? 'bg-green-600 border-green-600' : 'border-slate-600'
+                                      }`}>
+                                        {task.status === 'completed' && (
+                                          <svg className="w-full h-full text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                      <span className={`text-sm flex-1 ${task.status === 'completed' ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                        {task.title}
+                                      </span>
+                                      <span className={`text-xs px-2 py-0.5 rounded ${
+                                        task.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                                        task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                        'bg-green-500/20 text-green-400'
+                                      }`}>
+                                        {task.priority}
+                                      </span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null
+                        })()}
+
+                        {/* Linked Notes */}
+                        {(() => {
+                          const linkedNotes = notes.filter(n => n.linkedOrderId === selectedOrder.id)
+                          return linkedNotes.length > 0 ? (
+                            <div>
+                              <p className="text-xs text-slate-400 mb-2 flex items-center space-x-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                <span>Notes ({linkedNotes.length})</span>
+                              </p>
+                              <div className="space-y-2">
+                                {linkedNotes.map(note => (
+                                  <button
+                                    key={note.id}
+                                    onClick={() => {
+                                      closeModal()
+                                      setTimeout(() => {
+                                        setCurrentView('notes')
+                                        setModalType('editNote')
+                                        setFormData(note)
+                                        setShowModal(true)
+                                      }, 100)
+                                    }}
+                                    className="w-full text-left p-2 bg-slate-800/30 hover:bg-slate-800/50 rounded-lg border border-slate-700/50 transition-colors"
+                                  >
+                                    <p className="text-sm text-white font-medium mb-1">{note.title}</p>
+                                    <p className="text-xs text-slate-400 line-clamp-2">{note.content}</p>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null
+                        })()}
+
+                        {/* Quick Action Buttons */}
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          <button
+                            onClick={() => {
+                              setModalType('newTask')
+                              setFormData({
+                                title: '',
+                                description: '',
+                                priority: 'medium',
+                                status: 'pending',
+                                dueDate: '',
+                                category: 'general',
+                                linkedOrderId: selectedOrder.id
+                              })
+                              setShowModal(true)
+                            }}
+                            className="text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 px-3 py-1.5 rounded-lg flex items-center space-x-1 transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>Add Task</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setModalType('newNote')
+                              setFormData({
+                                title: '',
+                                content: '',
+                                category: 'general',
+                                linkedOrderId: selectedOrder.id,
+                                linkedClientId: selectedOrder.clientId
+                              })
+                              setShowModal(true)
+                            }}
+                            className="text-xs bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 px-3 py-1.5 rounded-lg flex items-center space-x-1 transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>Add Note</span>
+                          </button>
+                        </div>
+
+                        {(tasks.filter(t => t.linkedOrderId === selectedOrder.id).length === 0 && 
+                          notes.filter(n => n.linkedOrderId === selectedOrder.id).length === 0) && (
+                          <div className="text-center py-6 bg-slate-800/20 rounded-lg border border-dashed border-slate-700">
+                            <svg className="w-10 h-10 text-slate-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            <p className="text-slate-500 text-xs">No linked tasks or notes yet</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     {/* Activity Timeline */}
-                    <div>
+                    <div className="border-t border-slate-800 pt-4">
                       <div className="flex items-center justify-between mb-3">
                         <label className="block text-sm font-medium text-slate-300">Activity Timeline</label>
                         {selectedOrder.activities && selectedOrder.activities.length > 0 && (
@@ -7395,12 +8859,13 @@ function App() {
                 <div className="p-4 sm:p-6 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-stretch sm:items-center space-y-2 sm:space-y-0 flex-shrink-0">
                   <button 
                     onClick={() => {
-                      if (confirm('Are you sure you want to delete this order?')) {
+                      showConfirm('Are you sure you want to delete this order?', () => {
                         const updatedOrders = orders.filter(o => o.id !== selectedOrder.id)
                         localStorage.setItem('anchor_crm_orders', JSON.stringify(updatedOrders))
                         loadData()
                         closeModal()
-                      }
+                        showSuccess('Order deleted successfully')
+                      })
                     }}
                     className="px-4 sm:px-6 py-2 bg-red-600/10 hover:bg-red-600/20 border border-red-600/30 text-red-400 rounded-lg transition-colors text-sm sm:text-base"
                   >
@@ -7950,10 +9415,11 @@ function App() {
 
                 <button
                   onClick={() => {
-                    if (confirm('Reset all product configuration to defaults?')) {
+                    showConfirm('Reset all product configuration to defaults?', () => {
                       setCustomConfig({})
                       localStorage.removeItem('anchor_crm_custom_config')
-                    }
+                      showSuccess('Product configuration reset to defaults')
+                    })
                   }}
                   className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 text-sm"
                 >
@@ -8122,12 +9588,13 @@ function App() {
 
                 <button
                   onClick={() => {
-                    if (confirm('Reset invoice settings to defaults?')) {
+                    showConfirm('Reset invoice settings to defaults?', () => {
                       const updated = { ...customConfig }
                       delete updated.invoiceConfig
                       setCustomConfig(updated)
                       localStorage.setItem('anchor_crm_custom_config', JSON.stringify(updated))
-                    }
+                      showSuccess('Invoice settings reset to defaults')
+                    })
                   }}
                   className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 text-sm"
                 >
@@ -8347,9 +9814,9 @@ function App() {
                     };
                     const result = await generateInvoicePDF(customOrder, invoiceData.client, null, invoiceData);
                     if (result.success) {
-                      alert(`Invoice ${result.fileName} downloaded successfully!`);
+                      showSuccess(`Invoice ${result.fileName} downloaded successfully!`);
                     } else {
-                      alert(`Error: ${result.error}`);
+                      showError(`Error: ${result.error}`);
                     }
                   }}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium flex items-center space-x-2"
@@ -9257,9 +10724,9 @@ function App() {
                               }
                             })
                             setInvoiceData({...invoiceData, items: [...invoiceData.items, ...timeItems]})
-                            alert(`Imported ${timeItems.length} time entries`)
+                            showSuccess(`Imported ${timeItems.length} time entries`)
                           } else {
-                            alert('No time entries found for this order')
+                            showWarning('No time entries found for this order')
                           }
                         }}
                         className="p-2 bg-green-600 hover:bg-green-700 rounded-lg text-white text-sm font-medium transition-colors flex items-center justify-center space-x-1"
@@ -10393,6 +11860,826 @@ function App() {
               </button>
               <button onClick={handleSaveEvent} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
                 Create Event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Task Modal */}
+      {(modalType === 'newTask' || modalType === 'editTask') && showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-2xl">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">{modalType === 'editTask' ? 'Edit Task' : 'New Task'}</h2>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Task Title *</label>
+                <input
+                  type="text"
+                  value={formData.title || ''}
+                  onChange={(e) => setFormData({...formData, title: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  placeholder="What needs to be done?"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                <textarea
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  rows="3"
+                  placeholder="Additional details..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Priority</label>
+                  <select
+                    value={formData.priority || 'medium'}
+                    onChange={(e) => setFormData({...formData, priority: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                  <select
+                    value={formData.category || 'general'}
+                    onChange={(e) => setFormData({...formData, category: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="general">General</option>
+                    <option value="sales">Sales</option>
+                    <option value="production">Production</option>
+                    <option value="admin">Admin</option>
+                    <option value="follow-up">Follow-up</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Due Date</label>
+                <input
+                  type="date"
+                  value={formData.dueDate || ''}
+                  onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="border-t border-slate-700 pt-4">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <span className="flex items-center space-x-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    <span>Link to Order (Optional)</span>
+                  </span>
+                </label>
+                <select
+                  value={formData.linkedOrderId || ''}
+                  onChange={(e) => setFormData({...formData, linkedOrderId: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">No order linked</option>
+                  {orders.map(order => {
+                    const client = clients.find(c => c.id === order.clientId)
+                    return (
+                      <option key={order.id} value={order.id}>
+                        {order.orderNumber} - {client?.name || 'Unknown'} - {order.title || 'Untitled'}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end space-x-3">
+              <button onClick={closeModal} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!formData.title?.trim()) {
+                    showError('Please enter a task title')
+                    return
+                  }
+
+                  const taskData = {
+                    id: formData.id || `task-${Date.now()}`,
+                    title: formData.title,
+                    description: formData.description || '',
+                    priority: formData.priority || 'medium',
+                    category: formData.category || 'general',
+                    status: formData.status || 'pending',
+                    dueDate: formData.dueDate || null,
+                    linkedOrderId: formData.linkedOrderId || null,
+                    createdAt: formData.createdAt || new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                  }
+
+                  let updatedTasks
+                  if (modalType === 'editTask') {
+                    updatedTasks = tasks.map(t => t.id === taskData.id ? taskData : t)
+                  } else {
+                    updatedTasks = [...tasks, taskData]
+                  }
+
+                  setTasks(updatedTasks)
+                  localStorage.setItem('anchor_crm_tasks', JSON.stringify(updatedTasks))
+                  closeModal()
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                {modalType === 'editTask' ? 'Save Changes' : 'Create Task'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New/Edit Note Modal */}
+      {(modalType === 'newNote' || modalType === 'editNote') && showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+              <h2 className="text-xl font-bold text-white">{modalType === 'editNote' ? 'Edit Note' : 'New Note'}</h2>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Note Title *</label>
+                <input
+                  type="text"
+                  value={formData.title || ''}
+                  onChange={(e) => setFormData({...formData, title: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  placeholder="Give your note a title..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                <select
+                  value={formData.category || 'general'}
+                  onChange={(e) => setFormData({...formData, category: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="general">General</option>
+                  <option value="client-info">Client Info</option>
+                  <option value="process">Process/Procedure</option>
+                  <option value="meeting-notes">Meeting Notes</option>
+                  <option value="ideas">Ideas</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                      <span>Link to Order</span>
+                    </span>
+                  </label>
+                  <select
+                    value={formData.linkedOrderId || ''}
+                    onChange={(e) => setFormData({...formData, linkedOrderId: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">No order</option>
+                    {orders.map(order => {
+                      const client = clients.find(c => c.id === order.clientId)
+                      return (
+                        <option key={order.id} value={order.id}>
+                          {order.orderNumber} - {client?.name || 'Unknown'}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <span>Link to Client</span>
+                    </span>
+                  </label>
+                  <select
+                    value={formData.linkedClientId || ''}
+                    onChange={(e) => setFormData({...formData, linkedClientId: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">No client</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Content *</label>
+                <textarea
+                  value={formData.content || ''}
+                  onChange={(e) => setFormData({...formData, content: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none font-mono text-sm"
+                  rows="12"
+                  placeholder="Write your note here... (Markdown supported)"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end space-x-3 flex-shrink-0">
+              <button onClick={closeModal} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!formData.title?.trim() || !formData.content?.trim()) {
+                    showError('Please enter both a title and content')
+                    return
+                  }
+
+                  const noteData = {
+                    id: formData.id || `note-${Date.now()}`,
+                    title: formData.title,
+                    content: formData.content,
+                    category: formData.category || 'general',
+                    linkedOrderId: formData.linkedOrderId || null,
+                    linkedClientId: formData.linkedClientId || null,
+                    createdAt: formData.createdAt || new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                  }
+
+                  let updatedNotes
+                  if (modalType === 'editNote') {
+                    dataManager.notes.save(noteData)
+                    updatedNotes = notes.map(n => n.id === noteData.id ? noteData : n)
+                    showSuccess('Note updated successfully')
+                  } else {
+                    dataManager.notes.save(noteData)
+                    updatedNotes = [...notes, noteData]
+                    showSuccess('Note created successfully')
+                  }
+
+                  setNotes(updatedNotes)
+                  closeModal()
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                {modalType === 'editNote' ? 'Save Changes' : 'Create Note'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Email Template Modal */}
+      {modalType === 'previewEmailTemplate' && showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+              <div>
+                <h2 className="text-xl font-bold text-white">Preview: {formData.name}</h2>
+                <p className="text-slate-400 text-sm">Showing template with sample data</p>
+              </div>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              {/* Sample data notice */}
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-blue-300 text-sm font-medium mb-1">Preview Mode</p>
+                    <p className="text-blue-200/70 text-xs">
+                      This is how your email will look with sample data. Variables like {'{'}{'{'} client_name {'}'}{'}'}  will be replaced with actual data when sent.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Email Preview */}
+              <div className="bg-white rounded-lg overflow-hidden shadow-xl">
+                {/* Email Header */}
+                <div className="bg-slate-100 border-b border-slate-300 p-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-600 text-sm font-medium w-20">From:</span>
+                      <span className="text-slate-900 text-sm">{customConfig.businessName || 'Your Business'} &lt;you@business.com&gt;</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-600 text-sm font-medium w-20">To:</span>
+                      <span className="text-slate-900 text-sm">John Doe &lt;john@example.com&gt;</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-600 text-sm font-medium w-20">Subject:</span>
+                      <span className="text-slate-900 text-sm font-semibold">
+                        {formData.subject
+                          .replace(/\{\{client_name\}\}/g, 'John Doe')
+                          .replace(/\{\{order_number\}\}/g, '#12345')
+                          .replace(/\{\{total\}\}/g, '$299.99')
+                          .replace(/\{\{business_name\}\}/g, customConfig.businessName || 'Your Business')
+                        }
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email Body */}
+                <div className="p-6 bg-white">
+                  <div className="text-slate-900 whitespace-pre-wrap text-sm leading-relaxed">
+                    {formData.body
+                      .replace(/\{\{client_name\}\}/g, 'John Doe')
+                      .replace(/\{\{client_email\}\}/g, 'john@example.com')
+                      .replace(/\{\{order_number\}\}/g, '#12345')
+                      .replace(/\{\{total\}\}/g, '$299.99')
+                      .replace(/\{\{due_date\}\}/g, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString())
+                      .replace(/\{\{business_name\}\}/g, customConfig.businessName || 'Your Business')
+                    }
+                  </div>
+                </div>
+
+                {/* Email Footer */}
+                <div className="bg-slate-50 border-t border-slate-200 p-4 text-center">
+                  <p className="text-slate-500 text-xs">
+                    © {new Date().getFullYear()} {customConfig.businessName || 'Your Business'}. All rights reserved.
+                  </p>
+                </div>
+              </div>
+
+              {/* Variable Reference */}
+              <div className="bg-slate-800/50 rounded-lg p-4">
+                <h4 className="text-white font-medium text-sm mb-3">Available Variables:</h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-400">{'{'}{'{'} client_name {'}'}{'}'}  →</span>
+                    <span className="text-white ml-2">John Doe</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">{'{'}{'{'} client_email {'}'}{'}'}  →</span>
+                    <span className="text-white ml-2">john@example.com</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">{'{'}{'{'} order_number {'}'}{'}'}  →</span>
+                    <span className="text-white ml-2">#12345</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">{'{'}{'{'} total {'}'}{'}'}  →</span>
+                    <span className="text-white ml-2">$299.99</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">{'{'}{'{'} due_date {'}'}{'}'}  →</span>
+                    <span className="text-white ml-2">{new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">{'{'}{'{'} business_name {'}'}{'}'}  →</span>
+                    <span className="text-white ml-2">{customConfig.businessName || 'Your Business'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end space-x-3 flex-shrink-0">
+              <button onClick={closeModal} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors">
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  closeModal()
+                  setTimeout(() => {
+                    setModalType('editEmailTemplate')
+                    setShowModal(true)
+                  }, 100)
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Edit Template</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Use Email Template Modal */}
+      {modalType === 'useEmailTemplate' && showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+              <div>
+                <h2 className="text-xl font-bold text-white">Use Template: {formData.name}</h2>
+                <p className="text-slate-400 text-sm">Select order/client to populate the template</p>
+              </div>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              {/* Selection Section */}
+              <div className="grid grid-cols-2 gap-4 bg-slate-800/50 p-4 rounded-lg">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>Select Order</span>
+                    </span>
+                  </label>
+                  <select
+                    value={formData.selectedOrderId || ''}
+                    onChange={(e) => {
+                      const order = orders.find(o => o.id === e.target.value)
+                      setFormData({
+                        ...formData, 
+                        selectedOrderId: e.target.value,
+                        selectedClientId: order?.clientId || ''
+                      })
+                    }}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">Select an order...</option>
+                    {orders.map(order => {
+                      const client = clients.find(c => c.id === order.clientId)
+                      return (
+                        <option key={order.id} value={order.id}>
+                          {order.orderNumber} - {client?.name || 'Unknown'} - ${order.totalAmount?.toFixed(2)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <span className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <span>Client</span>
+                    </span>
+                  </label>
+                  <select
+                    value={formData.selectedClientId || ''}
+                    onChange={(e) => setFormData({...formData, selectedClientId: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">Select a client...</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.id}>
+                        {client.name} - {client.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Live Email Preview */}
+              {(formData.selectedOrderId || formData.selectedClientId) ? (
+                <div className="bg-white rounded-lg overflow-hidden shadow-xl">
+                  {/* Email Header */}
+                  <div className="bg-slate-100 border-b border-slate-300 p-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-slate-600 text-sm font-medium w-20">From:</span>
+                        <span className="text-slate-900 text-sm">{customConfig.businessName || 'Your Business'} &lt;you@business.com&gt;</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-slate-600 text-sm font-medium w-20">To:</span>
+                        <span className="text-slate-900 text-sm">
+                          {(() => {
+                            const selectedClient = clients.find(c => c.id === formData.selectedClientId)
+                            return selectedClient ? `${selectedClient.name} <${selectedClient.email}>` : 'Select a client'
+                          })()}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-slate-600 text-sm font-medium w-20">Subject:</span>
+                        <span className="text-slate-900 text-sm font-semibold">
+                          {(() => {
+                            const selectedOrder = orders.find(o => o.id === formData.selectedOrderId)
+                            const selectedClient = clients.find(c => c.id === formData.selectedClientId)
+                            return formData.subject
+                              .replace(/\\{\\{client_name\\}\\}/g, selectedClient?.name || '[Client Name]')
+                              .replace(/\\{\\{order_number\\}\\}/g, selectedOrder?.orderNumber || '[Order #]')
+                              .replace(/\\{\\{total\\}\\}/g, selectedOrder ? `$${selectedOrder.totalAmount?.toFixed(2)}` : '$0.00')
+                              .replace(/\\{\\{business_name\\}\\}/g, customConfig.businessName || 'Your Business')
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email Body */}
+                  <div className="p-6 bg-white">
+                    <div className="text-slate-900 whitespace-pre-wrap text-sm leading-relaxed">
+                      {(() => {
+                        const selectedOrder = orders.find(o => o.id === formData.selectedOrderId)
+                        const selectedClient = clients.find(c => c.id === formData.selectedClientId)
+                        return formData.body
+                          .replace(/\\{\\{client_name\\}\\}/g, selectedClient?.name || '[Client Name]')
+                          .replace(/\\{\\{client_email\\}\\}/g, selectedClient?.email || '[Client Email]')
+                          .replace(/\\{\\{order_number\\}\\}/g, selectedOrder?.orderNumber || '[Order #]')
+                          .replace(/\\{\\{total\\}\\}/g, selectedOrder ? `$${selectedOrder.totalAmount?.toFixed(2)}` : '$0.00')
+                          .replace(/\\{\\{due_date\\}\\}/g, selectedOrder?.dueDate ? new Date(selectedOrder.dueDate).toLocaleDateString() : '[Due Date]')
+                          .replace(/\\{\\{business_name\\}\\}/g, customConfig.businessName || 'Your Business')
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Email Footer */}
+                  <div className="bg-slate-50 border-t border-slate-200 p-4 text-center">
+                    <p className="text-slate-500 text-xs">
+                      © {new Date().getFullYear()} {customConfig.businessName || 'Your Business'}. All rights reserved.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-12 text-center">
+                  <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-white font-semibold mb-2">Select an order or client</h3>
+                  <p className="text-slate-400 text-sm">Choose an order or client above to see the populated email template</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-between items-center flex-shrink-0">
+              <button onClick={closeModal} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors">
+                Cancel
+              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    const selectedOrder = orders.find(o => o.id === formData.selectedOrderId)
+                    const selectedClient = clients.find(c => c.id === formData.selectedClientId)
+                    if (!selectedClient) {
+                      showError('Please select a client to send the email')
+                      return
+                    }
+                    const emailContent = {
+                      to: selectedClient.email,
+                      subject: formData.subject
+                        .replace(/\\{\\{client_name\\}\\}/g, selectedClient?.name || '')
+                        .replace(/\\{\\{order_number\\}\\}/g, selectedOrder?.orderNumber || '')
+                        .replace(/\\{\\{total\\}\\}/g, selectedOrder ? `$${selectedOrder.totalAmount?.toFixed(2)}` : '$0.00')
+                        .replace(/\\{\\{business_name\\}\\}/g, customConfig.businessName || 'Your Business'),
+                      body: formData.body
+                        .replace(/\\{\\{client_name\\}\\}/g, selectedClient?.name || '')
+                        .replace(/\\{\\{client_email\\}\\}/g, selectedClient?.email || '')
+                        .replace(/\\{\\{order_number\\}\\}/g, selectedOrder?.orderNumber || '')
+                        .replace(/\\{\\{total\\}\\}/g, selectedOrder ? `$${selectedOrder.totalAmount?.toFixed(2)}` : '$0.00')
+                        .replace(/\\{\\{due_date\\}\\}/g, selectedOrder?.dueDate ? new Date(selectedOrder.dueDate).toLocaleDateString() : '')
+                        .replace(/\\{\\{business_name\\}\\}/g, customConfig.businessName || 'Your Business')
+                    }
+                    // In a real app, this would send via API
+                    navigator.clipboard.writeText(`To: ${emailContent.to}\\nSubject: ${emailContent.subject}\\n\\n${emailContent.body}`)
+                    showSuccess('Email content copied to clipboard! In production, this would send via your email service.')
+                    closeModal()
+                  }}
+                  disabled={!formData.selectedClientId}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span>Copy Email / Send</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New/Edit Email Template Modal */}
+      {(modalType === 'newEmailTemplate' || modalType === 'editEmailTemplate') && showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+              <h2 className="text-xl font-bold text-white">
+                {modalType === 'editEmailTemplate' ? 'Edit Email Template' : 'New Email Template'}
+              </h2>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Template Name *</label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  placeholder="e.g., Welcome Email, Quote Follow-up"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                <select
+                  value={formData.category || 'general'}
+                  onChange={(e) => setFormData({...formData, category: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="general">General</option>
+                  <option value="sales">Sales</option>
+                  <option value="follow-up">Follow-up</option>
+                  <option value="invoice">Invoice</option>
+                  <option value="support">Support</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Subject Line *</label>
+                <input
+                  type="text"
+                  value={formData.subject || ''}
+                  onChange={(e) => setFormData({...formData, subject: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  placeholder="Email subject line..."
+                />
+                <p className="text-slate-500 text-xs mt-1">
+                  Use variables: {'{{client_name}}'}, {'{{order_number}}'}, {'{{total}}'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Email Body *</label>
+                <textarea
+                  value={formData.body || ''}
+                  onChange={(e) => setFormData({...formData, body: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none font-mono text-sm"
+                  rows="10"
+                  placeholder="Write your email template here...&#10;&#10;Use variables like {{client_name}}, {{order_number}}, {{total}}, {{due_date}}"
+                />
+                <p className="text-slate-500 text-xs mt-1">
+                  Available variables: {'{{client_name}}'}, {'{{client_email}}'}, {'{{order_number}}'}, {'{{total}}'}, {'{{due_date}}'}, {'{{business_name}}'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end space-x-3 flex-shrink-0">
+              <button onClick={closeModal} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!formData.name?.trim() || !formData.subject?.trim() || !formData.body?.trim()) {
+                    showError('Please fill in all required fields')
+                    return
+                  }
+
+                  const templateData = {
+                    id: formData.id || `template-${Date.now()}`,
+                    name: formData.name,
+                    subject: formData.subject,
+                    body: formData.body,
+                    category: formData.category || 'general',
+                    createdAt: formData.createdAt || new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                  }
+
+                  let updatedTemplates
+                  if (modalType === 'editEmailTemplate') {
+                    dataManager.emailTemplates.save(templateData)
+                    updatedTemplates = emailTemplates.map(t => t.id === templateData.id ? templateData : t)
+                    showSuccess('Template updated successfully')
+                  } else {
+                    dataManager.emailTemplates.save(templateData)
+                    updatedTemplates = [...emailTemplates, templateData]
+                    showSuccess('Template created successfully')
+                  }
+
+                  setEmailTemplates(updatedTemplates)
+                  closeModal()
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                {modalType === 'editEmailTemplate' ? 'Save Changes' : 'Create Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notifications Container - Middle Right */}
+      <div className="fixed right-4 top-1/2 -translate-y-1/2 z-50 space-y-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`
+              px-6 py-4 rounded-lg shadow-2xl backdrop-blur-sm
+              transform transition-all duration-300 ease-in-out
+              animate-slide-in-right
+              ${toast.type === 'success' ? 'bg-green-500/90 text-white' : ''}
+              ${toast.type === 'error' ? 'bg-red-500/90 text-white' : ''}
+              ${toast.type === 'warning' ? 'bg-yellow-500/90 text-white' : ''}
+              ${toast.type === 'info' ? 'bg-blue-500/90 text-white' : ''}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              {toast.type === 'success' && (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              {toast.type === 'error' && (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+              {toast.type === 'warning' && (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              )}
+              {toast.type === 'info' && (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span className="font-medium">{toast.message}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Confirmation Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-slate-700 animate-scale-in">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                <svg className="w-6 h-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-white mb-2">Confirm Action</h3>
+                <p className="text-slate-300 whitespace-pre-line">{confirmDialog.message}</p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setConfirmDialog(null)
+                }}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmDialog.onConfirm()
+                  setConfirmDialog(null)
+                }}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
+              >
+                Confirm
               </button>
             </div>
           </div>
