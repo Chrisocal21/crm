@@ -213,7 +213,25 @@ function App() {
     const allTasks = dataManager.tasks.getAll()
     const allNotes = dataManager.notes.getAll()
     const allEmailTemplates = dataManager.emailTemplates.getAll()
-    const allUsers = dataManager.users.getAll()
+    let allUsers = dataManager.users.getAll()
+    
+    // Ensure default admin user exists
+    if (!allUsers || allUsers.length === 0) {
+      const defaultAdmin = {
+        id: 'user-1',
+        name: 'Admin User',
+        email: 'admin@anchor.com',
+        password: 'admin123',
+        role: 'admin',
+        profileImage: null,
+        avatar: null,
+        createdAt: new Date().toISOString(),
+        active: true
+      }
+      allUsers = [defaultAdmin]
+      dataManager.users.save(defaultAdmin)
+    }
+    
     const allActiveTimers = dataManager.activeTimers.get()
     const allConnectedStores = dataManager.connectedStores.get()
     const customConfigData = dataManager.customConfig.get()
