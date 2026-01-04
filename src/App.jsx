@@ -16,6 +16,7 @@ import BidsView from './components/views/BidsView'
 import InventoryView from './components/views/InventoryView'
 import EmailTemplatesView from './components/views/EmailTemplatesView'
 import TimesheetsView from './components/views/TimesheetsView'
+import TimelineView from './components/views/TimelineView'
 
 // Icon renderer component - handles both SVG strings and image URLs
 const Icon = ({ icon, className = "w-5 h-5" }) => {
@@ -4733,13 +4734,20 @@ function App() {
 
           {/* Timeline View */}
           {currentView === 'timeline' && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Order Timeline</h2>
-                  <p className="text-slate-400">Visualize order schedules and due dates</p>
-                </div>
-                <div className="flex items-center space-x-3">
+            <TimelineView
+              orders={orders}
+              timelineView={timelineView}
+              setTimelineView={setTimelineView}
+              timelineDate={timelineDate}
+              setTimelineDate={setTimelineDate}
+              setSelectedOrderId={setSelectedOrderId}
+              setModalType={setModalType}
+              setShowModal={setShowModal}
+            />
+          )}
+
+          {/* Tasks View */}
+          {currentView === 'tasks' && (
                   {/* View Mode Selector */}
                   <div className="flex items-center space-x-1 bg-slate-800/50 rounded-lg p-1">
                     {['week', 'month', 'quarter'].map(view => (
