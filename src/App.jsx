@@ -26,7 +26,7 @@ function App() {
   // State management - ALL hooks must be at top level
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [authView, setAuthView] = useState('landing') // 'landing', 'signin', 'signup'
-  const [currentView, setCurrentView] = useState('landing') // landing, dashboard, orders, clients, analytics, invoices
+  const [currentView, setCurrentView] = useState('dashboard') // dashboard, orders, clients, analytics, invoices
   const [authFormData, setAuthFormData] = useState({
     email: '',
     password: '',
@@ -36,6 +36,8 @@ function App() {
   })
   const [orders, setOrders] = useState([])
   const [clients, setClients] = useState([])
+  const [bids, setBids] = useState([])
+  const [inventory, setInventory] = useState([])
   const [stats, setStats] = useState({})
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [showModal, setShowModal] = useState(false)
@@ -72,6 +74,43 @@ function App() {
   const [isModalFullscreen, setIsModalFullscreen] = useState(false)
   const [showInvoiceEditor, setShowInvoiceEditor] = useState(false)
   const [invoiceData, setInvoiceData] = useState(null)
+  const [showFilePreview, setShowFilePreview] = useState(false)
+  const [previewFile, setPreviewFile] = useState(null)
+  const [tasks, setTasks] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_tasks')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [users, setUsers] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_users')
+    if (saved) return JSON.parse(saved)
+    // Create default admin user
+    const defaultAdmin = {
+      id: 'user-1',
+      name: 'Admin User',
+      email: 'admin@anchor.com',
+      password: 'admin123', // In production, this would be hashed
+      role: 'admin',
+      avatar: null,
+      createdAt: new Date().toISOString(),
+      active: true
+    }
+    localStorage.setItem('anchor_crm_users', JSON.stringify([defaultAdmin]))
+    return [defaultAdmin]
+  })
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_current_user')
+    return saved ? JSON.parse(saved) : null
+  })
+  const [showUserModal, setShowUserModal] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [timesheetFilters, setTimesheetFilters] = useState({
+    search: '',
+    startDate: '',
+    endDate: '',
+    orderId: 'all',
+    userId: 'all'
+  })
 
   // Merged config - custom overrides default
   const activeConfig = {
@@ -134,14 +173,36 @@ function App() {
     localStorage.setItem('anchor_crm_active_timers', JSON.stringify(activeTimers))
   }, [activeTimers])
 
+  // Save users to localStorage
+  useEffect(() => {
+    localStorage.setItem('anchor_crm_users', JSON.stringify(users))
+  }, [users])
+
+  // Save current user to localStorage
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('anchor_crm_current_user', JSON.stringify(currentUser))
+      setIsLoggedIn(true)
+    } else {
+      localStorage.removeItem('anchor_crm_current_user')
+      setIsLoggedIn(false)
+    }
+  }, [currentUser])
+
   const loadData = () => {
     const allOrders = dataManager.orders.getAll()
     const allClients = dataManager.clients.getAll()
     const orderStats = dataManager.orders.getStats()
     
+    // Load bids and inventory from localStorage
+    const savedBids = localStorage.getItem('anchor_crm_bids')
+    const savedInventory = localStorage.getItem('anchor_crm_inventory')
+    
     setOrders(allOrders)
     setClients(allClients)
     setStats(orderStats)
+    setBids(savedBids ? JSON.parse(savedBids) : [])
+    setInventory(savedInventory ? JSON.parse(savedInventory) : [])
     
     console.log('📊 Data loaded:', {
       orders: allOrders.length,
@@ -154,11 +215,6 @@ function App() {
   const handleGetStarted = () => {
     setIsLoggedIn(true)
     setCurrentView('dashboard')
-  }
-
-  const handleLogout = () => {
-    setIsLoggedIn(false)
-    setCurrentView('landing')
   }
 
   // Sidebar navigation items
@@ -366,7 +422,103 @@ function App() {
     }
     
     dataManager.orders.save(updatedOrder)
+
+    // Log status change activity AFTER saving
+    if (formData.status && formData.status !== selectedOrder.status) {
+      const oldStatus = CONFIG.statuses.find(s => s.id === selectedOrder.status)
+      const newStatus = CONFIG.statuses.find(s => s.id === formData.status)
+      
+      // Manually add activity since order is already saved
+      const activities = updatedOrder.activities || []
+      const activity = {
+        id: `activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        type: 'status_change',
+        entityType: 'order',
+        entityId: selectedOrder.id,
+        description: `Status changed from ${oldStatus?.label} to ${newStatus?.label}`,
+        metadata: { oldStatus: selectedOrder.status, newStatus: formData.status },
+        timestamp: new Date().toISOString(),
+        user: currentUser?.name || 'System'
+      }
+      
+      const orderWithActivity = {
+        ...updatedOrder,
+        activities: [activity, ...activities]
+      }
+      
+      dataManager.orders.save(orderWithActivity)
+    }
+    
+    // Log priority change
+    if (formData.priority && formData.priority !== selectedOrder.priority) {
+      logActivity('updated', 'order', selectedOrder.id, `Priority changed from ${selectedOrder.priority} to ${formData.priority}`, { 
+        field: 'priority',
+        oldValue: selectedOrder.priority, 
+        newValue: formData.priority 
+      })
+    }
+    
+    // Log notes update
+    if (formData.notes !== undefined && formData.notes !== selectedOrder.notes) {
+      logActivity('updated', 'order', selectedOrder.id, `Order notes updated`, { 
+        field: 'notes',
+        hasNotes: formData.notes?.length > 0
+      })
+    }
+    
     loadData()
+    closeModal()
+  }
+
+  const handleSaveBid = () => {
+    if (!formData.clientId || !formData.items || formData.items.length === 0) {
+      alert('Client and at least one item are required')
+      return
+    }
+
+    const newBid = {
+      ...formData,
+      id: dataManager.generateId(),
+      bidNumber: `BID-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: currentUser?.name || 'System'
+    }
+
+    const updatedBids = [...bids, newBid]
+    setBids(updatedBids)
+    localStorage.setItem('anchor_crm_bids', JSON.stringify(updatedBids))
+    closeModal()
+  }
+
+  const handleSaveInventoryItem = () => {
+    if (!formData.name) {
+      alert('Item name is required')
+      return
+    }
+
+    const newItem = {
+      ...formData,
+      id: dataManager.generateId(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    const updatedInventory = [...inventory, newItem]
+    setInventory(updatedInventory)
+    localStorage.setItem('anchor_crm_inventory', JSON.stringify(updatedInventory))
+    closeModal()
+  }
+
+  const handleSaveEvent = () => {
+    if (!formData.title || !formData.date) {
+      alert('Event title and date are required')
+      return
+    }
+
+    // Events can be stored with orders or separately
+    // For now, just close the modal (implement full calendar later)
+    alert('Calendar event saved!')
     closeModal()
   }
 
@@ -483,9 +635,260 @@ function App() {
     }
   }
 
+  // Activity logging
+  const logActivity = (type, entityType, entityId, description, metadata = {}) => {
+    const order = orders.find(o => o.id === entityId)
+    if (!order) return // Don't log if order doesn't exist
+    
+    const activities = order.activities || []
+    
+    const activity = {
+      id: `activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type, // 'status_change', 'payment', 'comment', 'file_upload', 'time_entry', 'created', 'updated'
+      entityType, // 'order', 'client'
+      entityId,
+      description,
+      metadata,
+      timestamp: new Date().toISOString(),
+      user: currentUser?.name || 'System'
+    }
+    
+    const updatedOrder = {
+      ...order,
+      activities: [activity, ...activities]
+    }
+    
+    dataManager.orders.save(updatedOrder)
+  }
+
+  // Comments system
+  const addComment = (orderId, text, images = []) => {
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
+
+    const comment = {
+      id: `comment_${Date.now()}`,
+      text,
+      images: images || [],
+      timestamp: new Date().toISOString(),
+      user: currentUser?.name || 'System'
+    }
+
+    const updatedOrder = {
+      ...order,
+      comments: [...(order.comments || []), comment]
+    }
+
+    dataManager.orders.save(updatedOrder)
+    
+    // Log activity
+    logActivity('comment', 'order', orderId, `${comment.user} added a comment${images.length > 0 ? ` with ${images.length} image(s)` : ''}`, { commentId: comment.id })
+    
+    // Update selectedOrder if it's the current order
+    if (selectedOrder?.id === orderId) {
+      setSelectedOrder(updatedOrder)
+    }
+    
+    loadData()
+  }
+
+  const deleteComment = (orderId, commentId) => {
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
+
+    const updatedOrder = {
+      ...order,
+      comments: (order.comments || []).filter(c => c.id !== commentId)
+    }
+
+    dataManager.orders.save(updatedOrder)
+    
+    // Update selectedOrder if it's the current order
+    if (selectedOrder?.id === orderId) {
+      setSelectedOrder(updatedOrder)
+    }
+    
+    loadData()
+  }
+
+  // Task/Reminder system
+  const addTask = (title, description, dueDate, linkedOrderId = null) => {
+    const newTask = {
+      id: `task_${Date.now()}`,
+      title,
+      description,
+      dueDate,
+      linkedOrderId,
+      completed: false,
+      createdAt: new Date().toISOString()
+    }
+
+    const updatedTasks = [...tasks, newTask]
+    setTasks(updatedTasks)
+    localStorage.setItem('anchor_crm_tasks', JSON.stringify(updatedTasks))
+    
+    if (linkedOrderId) {
+      logActivity('task_created', 'order', linkedOrderId, `Task created: ${title}`)
+    }
+  }
+
+  const toggleTask = (taskId) => {
+    const updatedTasks = tasks.map(task => 
+      task.id === taskId 
+        ? { ...task, completed: !task.completed, completedAt: !task.completed ? new Date().toISOString() : null }
+        : task
+    )
+    setTasks(updatedTasks)
+    localStorage.setItem('anchor_crm_tasks', JSON.stringify(updatedTasks))
+  }
+
+  const deleteTask = (taskId) => {
+    const updatedTasks = tasks.filter(t => t.id !== taskId)
+    setTasks(updatedTasks)
+    localStorage.setItem('anchor_crm_tasks', JSON.stringify(updatedTasks))
+  }
+
+  // Get pending tasks and notifications
+  const getPendingNotifications = () => {
+    const now = new Date()
+    const overdueTasks = tasks.filter(t => !t.completed && new Date(t.dueDate) < now)
+    const upcomingTasks = tasks.filter(t => !t.completed && new Date(t.dueDate) >= now && new Date(t.dueDate) <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000))
+    const overdueOrders = orders.filter(o => {
+      if (!o.timeline?.dueDate) return false
+      const dueDate = new Date(o.timeline.dueDate)
+      return dueDate < now && !['completed', 'shipped'].includes(o.status)
+    })
+    
+    return {
+      overdueTasks,
+      upcomingTasks,
+      overdueOrders,
+      total: overdueTasks.length + upcomingTasks.length + overdueOrders.length
+    }
+  }
+
   const getTotalTrackedTime = (order) => {
     if (!order.timeEntries || order.timeEntries.length === 0) return 0
     return order.timeEntries.reduce((sum, entry) => sum + entry.duration, 0)
+  }
+
+  // Permission system - role-based access control
+  const PERMISSIONS = {
+    // Admin has all permissions
+    admin: {
+      viewOrders: true,
+      createOrders: true,
+      editOrders: true,
+      deleteOrders: true,
+      viewClients: true,
+      createClients: true,
+      editClients: true,
+      deleteClients: true,
+      viewAnalytics: true,
+      viewInvoices: true,
+      createInvoices: true,
+      manageUsers: true,
+      manageSettings: true,
+      viewAllData: true
+    },
+    // Manager can do most things except user/settings management
+    manager: {
+      viewOrders: true,
+      createOrders: true,
+      editOrders: true,
+      deleteOrders: true,
+      viewClients: true,
+      createClients: true,
+      editClients: true,
+      deleteClients: false,
+      viewAnalytics: true,
+      viewInvoices: true,
+      createInvoices: true,
+      manageUsers: false,
+      manageSettings: false,
+      viewAllData: true
+    },
+    // Staff can only view and create, limited editing
+    staff: {
+      viewOrders: true,
+      createOrders: true,
+      editOrders: true,
+      deleteOrders: false,
+      viewClients: true,
+      createClients: true,
+      editClients: false,
+      deleteClients: false,
+      viewAnalytics: false,
+      viewInvoices: true,
+      createInvoices: false,
+      manageUsers: false,
+      manageSettings: false,
+      viewAllData: false
+    }
+  }
+
+  const hasPermission = (permission) => {
+    if (!currentUser) return false
+    return PERMISSIONS[currentUser.role]?.[permission] || false
+  }
+
+  // User management functions
+  const handleLogin = (email, password) => {
+    const user = users.find(u => u.email === email && u.password === password && u.active)
+    if (user) {
+      setCurrentUser(user)
+      setCurrentView('dashboard')
+      return true
+    }
+    return false
+  }
+
+  const handleLogout = () => {
+    setCurrentUser(null)
+    setCurrentView('landing')
+    setAuthView('landing')
+  }
+
+  const addUser = (userData) => {
+    const newUser = {
+      id: `user-${Date.now()}`,
+      ...userData,
+      createdAt: new Date().toISOString(),
+      active: true
+    }
+    const updatedUsers = [...users, newUser]
+    setUsers(updatedUsers)
+    return newUser
+  }
+
+  const updateUser = (userId, updates) => {
+    const updatedUsers = users.map(u => 
+      u.id === userId ? { ...u, ...updates } : u
+    )
+    setUsers(updatedUsers)
+    
+    // Update current user if editing self
+    if (currentUser?.id === userId) {
+      setCurrentUser({ ...currentUser, ...updates })
+    }
+  }
+
+  const deleteUser = (userId) => {
+    // Can't delete yourself or the last admin
+    if (currentUser?.id === userId) return false
+    
+    const admins = users.filter(u => u.role === 'admin' && u.id !== userId)
+    if (admins.length === 0) return false // Must have at least one admin
+    
+    const updatedUsers = users.filter(u => u.id !== userId)
+    setUsers(updatedUsers)
+    return true
+  }
+
+  const toggleUserActive = (userId) => {
+    updateUser(userId, { 
+      active: !users.find(u => u.id === userId)?.active 
+    })
   }
 
   // Bulk operations functions
@@ -700,6 +1103,13 @@ function App() {
               {/* Sign In Button */}
               <button
                 type="submit"
+                onClick={(e) => {
+                  e.preventDefault()
+                  const success = handleLogin(authFormData.email, authFormData.password)
+                  if (!success) {
+                    alert('Invalid email or password')
+                  }
+                }}
                 className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg font-semibold transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transform hover:scale-[1.02]"
               >
                 Sign In
@@ -713,6 +1123,15 @@ function App() {
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="px-2 bg-slate-900 text-slate-400">or</span>
+              </div>
+            </div>
+
+            {/* Demo Credentials */}
+            <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <p className="text-xs font-semibold text-blue-400 mb-2">DEMO CREDENTIALS</p>
+              <div className="text-xs text-slate-300 space-y-1">
+                <p><strong>Email:</strong> admin@anchor.com</p>
+                <p><strong>Password:</strong> admin123</p>
               </div>
             </div>
 
@@ -1476,9 +1895,9 @@ function App() {
 
         {/* Navigation */}
         <nav className="flex-1 p-3 overflow-y-auto">
-          {/* Main Section Header */}
+          {/* Workflow Section */}
           <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Main
+            Workflow
           </div>
           
           <div className="space-y-1 mb-6">
@@ -1535,11 +1954,29 @@ function App() {
               </svg>
               <span className="font-medium text-sm">Analytics</span>
             </button>
+
+            {/* Calendar */}
+            <button
+              onClick={() => {
+                setCurrentView('calendar')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+                currentView === 'calendar'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span className="font-medium text-sm">Calendar</span>
+            </button>
           </div>
 
-          {/* Sales Section */}
+          {/* Orders Section */}
           <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Sales
+            Orders
           </div>
           
           <div className="space-y-1 mb-6">
@@ -1619,7 +2056,14 @@ function App() {
                 </div>
               )}
             </div>
+          </div>
 
+          {/* Clients & Proposals Section */}
+          <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Clients & Proposals
+          </div>
+          
+          <div className="space-y-1 mb-6">
             {/* Clients */}
             <button
               onClick={() => {
@@ -1638,6 +2082,31 @@ function App() {
               <span className="font-medium text-sm">Clients</span>
             </button>
 
+            {/* Bids */}
+            <button
+              onClick={() => {
+                setCurrentView('bids')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+                currentView === 'bids'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <span className="font-medium text-sm">Bids</span>
+            </button>
+          </div>
+
+          {/* Financial Section */}
+          <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Financial
+          </div>
+          
+          <div className="space-y-1 mb-6">
             {/* Invoices */}
             <button
               onClick={() => {
@@ -1655,14 +2124,78 @@ function App() {
               </svg>
               <span className="font-medium text-sm">Invoices</span>
             </button>
+
+            {/* Timesheets */}
+            <button
+              onClick={() => {
+                setCurrentView('timesheets')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+                currentView === 'timesheets'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium text-sm">Timesheets</span>
+            </button>
+          </div>
+
+          {/* Operations Section */}
+          <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Operations
+          </div>
+          
+          <div className="space-y-1 mb-6">
+            {/* Inventory */}
+            <button
+              onClick={() => {
+                setCurrentView('inventory')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+                currentView === 'inventory'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              <span className="font-medium text-sm">Inventory</span>
+            </button>
           </div>
         </nav>
 
         {/* Settings Section at Bottom */}
         <div className="p-3 border-t border-slate-800/50 space-y-1">
+          {/* Upgrade Button - Highlighted */}
           <button
-            onClick={() => setShowSettings(true)}
-            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all group"
+            onClick={() => {
+              setCurrentView('upgrade')
+              setMobileMenuOpen(false)
+            }}
+            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white transition-all group shadow-lg shadow-purple-500/20"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="font-medium text-sm">Upgrade to Pro</span>
+          </button>
+          
+          <button
+            onClick={() => {
+              setCurrentView('settings')
+              setMobileMenuOpen(false)
+            }}
+            className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all group ${
+              currentView === 'settings'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+            }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -1673,13 +2206,16 @@ function App() {
           
           {/* Logout Button */}
           <button
-            onClick={handleLogout}
+            onClick={() => {
+              handleLogout()
+              setMobileMenuOpen(false)
+            }}
             className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-red-900/20 hover:text-red-400 transition-all group"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            <span className="font-medium text-sm">Back to Landing</span>
+            <span className="font-medium text-sm">Logout</span>
           </button>
         </div>
       </aside>
@@ -1706,12 +2242,99 @@ function App() {
               </div>
             </div>
 
-            {/* Global Search Bar */}
-            <div className="w-full lg:w-96 relative">
+            {/* Global Search Bar & Notifications */}
+            <div className="w-full lg:w-auto flex items-center gap-3">
+              {/* Notification Bell */}
               <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search orders, clients..."
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {getPendingNotifications().total > 0 && (
+                    <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                      {getPendingNotifications().total}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notifications Dropdown */}
+                {showNotifications && (
+                  <div className="absolute top-full right-0 mt-2 w-80 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50">
+                    <div className="p-4 border-b border-slate-800">
+                      <h3 className="font-semibold text-white">Notifications</h3>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {/* Overdue Tasks */}
+                      {getPendingNotifications().overdueTasks.length > 0 && (
+                        <div className="p-3 border-b border-slate-800">
+                          <p className="text-xs font-semibold text-red-400 mb-2">OVERDUE TASKS</p>
+                          {getPendingNotifications().overdueTasks.map(task => (
+                            <div key={task.id} className="mb-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-sm">
+                              <p className="text-white font-medium">{task.title}</p>
+                              <p className="text-red-400 text-xs">Due: {new Date(task.dueDate).toLocaleDateString()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Upcoming Tasks */}
+                      {getPendingNotifications().upcomingTasks.length > 0 && (
+                        <div className="p-3 border-b border-slate-800">
+                          <p className="text-xs font-semibold text-yellow-400 mb-2">UPCOMING TASKS</p>
+                          {getPendingNotifications().upcomingTasks.map(task => (
+                            <div key={task.id} className="mb-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-sm">
+                              <p className="text-white font-medium">{task.title}</p>
+                              <p className="text-yellow-400 text-xs">Due: {new Date(task.dueDate).toLocaleDateString()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Overdue Orders */}
+                      {getPendingNotifications().overdueOrders.length > 0 && (
+                        <div className="p-3">
+                          <p className="text-xs font-semibold text-orange-400 mb-2">OVERDUE ORDERS</p>
+                          {getPendingNotifications().overdueOrders.map(order => {
+                            const client = clients.find(c => c.id === order.clientId)
+                            return (
+                              <button
+                                key={order.id}
+                                onClick={() => {
+                                  openOrderDetailModal(order)
+                                  setShowNotifications(false)
+                                }}
+                                className="w-full mb-2 p-2 bg-orange-500/10 border border-orange-500/30 rounded text-sm hover:bg-orange-500/20 transition-colors"
+                              >
+                                <p className="text-white font-medium text-left">{order.orderNumber}</p>
+                                <p className="text-orange-400 text-xs text-left">{client?.name} · Due: {new Date(order.timeline.dueDate).toLocaleDateString()}</p>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {getPendingNotifications().total === 0 && (
+                        <div className="p-8 text-center text-slate-500">
+                          <svg className="w-12 h-12 mx-auto mb-2 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <p className="text-sm">All caught up!</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Global Search Bar */}
+              <div className="flex-1 lg:w-96 relative">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search orders, clients..."
                   value={globalSearch}
                   onChange={(e) => {
                     setGlobalSearch(e.target.value)
@@ -1814,6 +2437,111 @@ function App() {
                           </button>
                         )
                       })}
+                    </div>
+                  )}
+                </div>
+              )}
+              </div>
+
+              {/* User Profile Dropdown */}
+              {currentUser && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="flex items-center space-x-2 p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                  >
+                    <div className="relative">
+                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                        {currentUser.name.charAt(0).toUpperCase()}
+                      </div>
+                      {/* Online Status Indicator */}
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full"></div>
+                    </div>
+                    <span className="text-white text-sm hidden lg:inline">{currentUser.name}</span>
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* User Dropdown Menu */}
+                  {showSettings && (
+                    <div className="absolute top-full right-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50">
+                      <div className="p-3 border-b border-slate-800">
+                        <p className="text-white font-medium">{currentUser.name}</p>
+                        <p className="text-xs text-slate-400">{currentUser.email}</p>
+                        <p className="text-xs text-blue-400 mt-1 capitalize">{currentUser.role}</p>
+                      </div>
+                      
+                      {/* Online Users List */}
+                      <div className="p-3 border-b border-slate-800">
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Team Online</p>
+                        <div className="space-y-2">
+                          {users.map(user => (
+                            <div key={user.id} className="flex items-center space-x-2">
+                              <div className="relative">
+                                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                  {user.name.charAt(0).toUpperCase()}
+                                </div>
+                                {/* Status indicators - green (online), yellow (away), hollow (offline) */}
+                                <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 border border-slate-900 rounded-full ${
+                                  user.id === currentUser.id ? 'bg-green-500' : 
+                                  Math.random() > 0.5 ? 'bg-green-500' : 
+                                  Math.random() > 0.3 ? 'bg-yellow-500' : 
+                                  'bg-slate-600'
+                                }`}></div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white truncate">{user.name}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="p-2">
+                        <button
+                          onClick={() => {
+                            setCurrentView('settings')
+                            setShowSettings(false)
+                          }}
+                          className="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span className="text-sm">Settings</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => {
+                            setShowUserModal(true)
+                            setEditingUser(currentUser)
+                            setShowSettings(false)
+                          }}
+                          className="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span className="text-sm">My Profile</span>
+                        </button>
+                      </div>
+
+                      <div className="p-2 border-t border-slate-800">
+                        <button
+                          onClick={() => {
+                            handleLogout()
+                            setShowSettings(false)
+                          }}
+                          className="w-full text-left px-3 py-2 text-red-400 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                          </svg>
+                          <span className="text-sm">Logout</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2166,6 +2894,14 @@ function App() {
                             {order.timeline?.dueDate && (
                               <span className={`px-2 py-1 rounded text-xs font-medium ${dueDateStatus.className}`}>
                                 ⏰ {dueDateStatus.label}
+                              </span>
+                            )}
+                            {order.files && order.files.length > 0 && (
+                              <span className="px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/20 text-blue-400 flex items-center space-x-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                </svg>
+                                <span>{order.files.length}</span>
                               </span>
                             )}
                           </div>
@@ -3162,6 +3898,1535 @@ function App() {
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Users Management View */}
+          {currentView === 'users' && hasPermission('manageUsers') && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">User Management</h2>
+                  <p className="text-slate-400">Manage team members and permissions</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingUser(null)
+                    setShowUserModal(true)
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add User</span>
+                </button>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-slate-800/50">
+                    <tr>
+                      <th className="text-left p-4 text-slate-300 font-medium">User</th>
+                      <th className="text-left p-4 text-slate-300 font-medium">Role</th>
+                      <th className="text-left p-4 text-slate-300 font-medium">Status</th>
+                      <th className="text-left p-4 text-slate-300 font-medium">Joined</th>
+                      <th className="text-right p-4 text-slate-300 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {users.map(user => (
+                      <tr key={user.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="p-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                              {user.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="text-white font-medium">{user.name}</div>
+                              <div className="text-sm text-slate-400">{user.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
+                            user.role === 'manager' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-slate-500/20 text-slate-400'
+                          }`}>
+                            {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            user.active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {user.active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-slate-400">
+                          {formatDate(user.createdAt)}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => {
+                                setEditingUser(user)
+                                setShowUserModal(true)
+                              }}
+                              className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                              title="Edit user"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            {user.id !== currentUser?.id && (
+                              <>
+                                <button
+                                  onClick={() => toggleUserActive(user.id)}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    user.active 
+                                      ? 'text-yellow-400 hover:bg-yellow-500/10' 
+                                      : 'text-green-400 hover:bg-green-500/10'
+                                  }`}
+                                  title={user.active ? 'Deactivate' : 'Activate'}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    {user.active ? (
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                    ) : (
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    )}
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to delete ${user.name}?`)) {
+                                      const success = deleteUser(user.id)
+                                      if (!success) {
+                                        alert('Cannot delete user. Must have at least one admin.')
+                                      }
+                                    }
+                                  }}
+                                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                  title="Delete user"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Role Permissions Reference */}
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <div className="w-8 h-8 bg-purple-500/20 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-white font-semibold">Admin</h3>
+                  </div>
+                  <p className="text-sm text-slate-400 mb-3">Full access to all features</p>
+                  <ul className="text-xs text-slate-500 space-y-1">
+                    <li>✓ Manage all orders & clients</li>
+                    <li>✓ View analytics & reports</li>
+                    <li>✓ Manage users & settings</li>
+                    <li>✓ Full system access</li>
+                  </ul>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <div className="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-white font-semibold">Manager</h3>
+                  </div>
+                  <p className="text-sm text-slate-400 mb-3">Manage business operations</p>
+                  <ul className="text-xs text-slate-500 space-y-1">
+                    <li>✓ Manage orders & clients</li>
+                    <li>✓ View analytics & reports</li>
+                    <li>✓ Generate invoices</li>
+                    <li>✗ Cannot manage users</li>
+                  </ul>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <div className="w-8 h-8 bg-slate-500/20 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-white font-semibold">Staff</h3>
+                  </div>
+                  <p className="text-sm text-slate-400 mb-3">Basic access for daily tasks</p>
+                  <ul className="text-xs text-slate-500 space-y-1">
+                    <li>✓ View & create orders</li>
+                    <li>✓ View clients</li>
+                    <li>✓ View invoices</li>
+                    <li>✗ Limited editing access</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Settings View */}
+          {currentView === 'settings' && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-white">Settings</h2>
+                <p className="text-slate-400">Configure your preferences and business settings</p>
+              </div>
+
+              <div className="space-y-6">
+                {/* Business Profile - Admin Only */}
+                {hasPermission('manageSettings') && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-4">Business Profile</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Business Name</label>
+                      <input
+                        type="text"
+                        defaultValue={CONFIG.business.name}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Email</label>
+                      <input
+                        type="email"
+                        defaultValue={CONFIG.business.email}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Phone</label>
+                      <input
+                        type="tel"
+                        defaultValue={CONFIG.business.phone}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Website</label>
+                      <input
+                        type="url"
+                        defaultValue={CONFIG.business.website}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-slate-300 mb-2 text-sm">Address</label>
+                      <input
+                        type="text"
+                        defaultValue={CONFIG.business.address}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+                )}
+
+                {/* User Profile - All Users */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4">My Profile</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Name</label>
+                      <input
+                        type="text"
+                        defaultValue={currentUser.name}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Email</label>
+                      <input
+                        type="email"
+                        defaultValue={currentUser.email}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Role</label>
+                      <input
+                        type="text"
+                        value={currentUser.role}
+                        disabled
+                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-400 cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Change Password</label>
+                      <button
+                        onClick={() => {
+                          setShowUserModal(true)
+                          setEditingUser(currentUser)
+                        }}
+                        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors text-sm"
+                      >
+                        Update Profile
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tax & Currency - Admin Only */}
+                {hasPermission('manageSettings') && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-4">Tax & Currency</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Tax Rate (%)</label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        defaultValue={(CONFIG.defaults.taxRate * 100).toFixed(3)}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Currency</label>
+                      <select
+                        defaultValue={CONFIG.business.currency}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="USD">USD ($)</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="GBP">GBP (£)</option>
+                        <option value="CAD">CAD ($)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Default Deposit (%)</label>
+                      <input
+                        type="number"
+                        defaultValue={CONFIG.defaults.depositPercent}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-2 text-sm">Default Lead Time (days)</label>
+                      <input
+                        type="number"
+                        defaultValue={CONFIG.defaults.leadTimeDays}
+                        className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+                )}
+
+                {/* Notifications - Admin Only */}
+                {hasPermission('manageSettings') && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-4">Notifications</h3>
+                  <div className="space-y-3">
+                    <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                      <div>
+                        <div className="text-white font-medium">Order Status Changes</div>
+                        <div className="text-sm text-slate-400">Get notified when order status updates</div>
+                      </div>
+                      <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
+                    </label>
+                    <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                      <div>
+                        <div className="text-white font-medium">Payment Received</div>
+                        <div className="text-sm text-slate-400">Get notified when payments are recorded</div>
+                      </div>
+                      <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
+                    </label>
+                    <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                      <div>
+                        <div className="text-white font-medium">Overdue Alerts</div>
+                        <div className="text-sm text-slate-400">Get notified about overdue orders and tasks</div>
+                      </div>
+                      <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
+                    </label>
+                  </div>
+                </div>
+                )}
+
+                {/* User Management - Admin Only */}
+                {hasPermission('manageUsers') && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-white">User Management</h3>
+                      <button
+                        onClick={() => {
+                          setEditingUser(null)
+                          setShowUserModal(true)
+                        }}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>Add User</span>
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-slate-800/50">
+                          <tr>
+                            <th className="text-left p-3 text-slate-300 font-medium text-sm">User</th>
+                            <th className="text-left p-3 text-slate-300 font-medium text-sm">Role</th>
+                            <th className="text-left p-3 text-slate-300 font-medium text-sm">Status</th>
+                            <th className="text-right p-3 text-slate-300 font-medium text-sm">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {users.map(user => (
+                            <tr key={user.id} className="hover:bg-slate-800/30 transition-colors">
+                              <td className="p-3">
+                                <div className="flex items-center space-x-3">
+                                  <div className="relative">
+                                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
+                                      {user.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-slate-900 rounded-full ${
+                                      user.id === currentUser.id ? 'bg-green-500' : 'bg-slate-600'
+                                    }`}></div>
+                                  </div>
+                                  <div>
+                                    <p className="text-white text-sm font-medium">{user.name}</p>
+                                    <p className="text-slate-400 text-xs">{user.email}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium capitalize ${
+                                  user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
+                                  user.role === 'manager' ? 'bg-blue-500/20 text-blue-400' :
+                                  'bg-slate-500/20 text-slate-400'
+                                }`}>
+                                  {user.role}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <span className="inline-flex items-center space-x-1">
+                                  <div className={`w-2 h-2 rounded-full ${user.id === currentUser.id ? 'bg-green-500' : 'bg-slate-600'}`}></div>
+                                  <span className="text-slate-400 text-xs">{user.id === currentUser.id ? 'Online' : 'Offline'}</span>
+                                </span>
+                              </td>
+                              <td className="p-3 text-right">
+                                <button
+                                  onClick={() => {
+                                    setEditingUser(user)
+                                    setShowUserModal(true)
+                                  }}
+                                  className="inline-flex items-center px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors text-xs"
+                                >
+                                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                  Edit
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Save Button - Admin Only */}
+                {hasPermission('manageSettings') && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        alert('Settings saved successfully!')
+                      }}
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Save Settings</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Upgrade View */}
+          {currentView === 'upgrade' && (
+            <div>
+              <div className="mb-8 text-center">
+                <h2 className="text-3xl font-bold text-white mb-2">Choose Your Plan</h2>
+                <p className="text-slate-400">Select the perfect plan for your business needs</p>
+              </div>
+
+              {/* Pricing Cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
+                {/* Free/Starter Plan */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-blue-500/50 transition-all">
+                  <div className="mb-6">
+                    <h3 className="text-xl font-bold text-white mb-2">Starter</h3>
+                    <div className="flex items-baseline mb-4">
+                      <span className="text-4xl font-bold text-white">Free</span>
+                    </div>
+                    <p className="text-slate-400 text-sm">Perfect for getting started</p>
+                  </div>
+
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">Up to 25 orders/month</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">1 user account</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">100MB storage</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">Basic order management</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">Client database</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-slate-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      <span className="text-slate-500">No invoicing features</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-slate-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      <span className="text-slate-500">No time tracking</span>
+                    </li>
+                  </ul>
+
+                  <button
+                    disabled
+                    className="w-full py-3 px-4 bg-slate-800 text-slate-400 rounded-lg font-semibold cursor-not-allowed"
+                  >
+                    Current Plan
+                  </button>
+                </div>
+
+                {/* Pro Plan - Featured */}
+                <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 border-2 border-purple-500 rounded-xl p-6 relative transform scale-105 shadow-2xl shadow-purple-500/20">
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-bold px-4 py-1 rounded-full">
+                      MOST POPULAR
+                    </span>
+                  </div>
+
+                  <div className="mb-6 mt-2">
+                    <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
+                    <div className="flex items-baseline mb-4">
+                      <span className="text-4xl font-bold text-white">$29</span>
+                      <span className="text-slate-400 ml-2">/month</span>
+                    </div>
+                    <p className="text-slate-400 text-sm">For growing businesses</p>
+                  </div>
+
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-purple-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-white font-medium">Unlimited orders</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-purple-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-white font-medium">Up to 5 team members</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-purple-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-white font-medium">10GB storage</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-purple-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-white font-medium">Advanced invoicing</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-purple-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-white font-medium">Time tracking & reports</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-purple-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-white font-medium">Email notifications</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-purple-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-white font-medium">Priority support</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-purple-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-white font-medium">Custom branding</span>
+                    </li>
+                  </ul>
+
+                  <button
+                    onClick={() => alert('Stripe integration coming soon! This will redirect to checkout.')}
+                    className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg font-semibold transition-all shadow-lg shadow-purple-500/50"
+                  >
+                    Upgrade to Pro
+                  </button>
+                </div>
+
+                {/* Business Plan */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-yellow-500/50 transition-all">
+                  <div className="mb-6">
+                    <h3 className="text-xl font-bold text-white mb-2 flex items-center">
+                      Business
+                      <span className="ml-2 text-yellow-500">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      </span>
+                    </h3>
+                    <div className="flex items-baseline mb-4">
+                      <span className="text-4xl font-bold text-white">$79</span>
+                      <span className="text-slate-400 ml-2">/month</span>
+                    </div>
+                    <p className="text-slate-400 text-sm">For established businesses</p>
+                  </div>
+
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">Everything in Pro, plus:</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">Unlimited team members</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">100GB storage</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">API access</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">Advanced automation</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">Custom integrations</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">Dedicated account manager</span>
+                    </li>
+                    <li className="flex items-start text-sm">
+                      <svg className="w-5 h-5 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-slate-300">24/7 phone support</span>
+                    </li>
+                  </ul>
+
+                  <button
+                    onClick={() => alert('Stripe integration coming soon! This will redirect to checkout.')}
+                    className="w-full py-3 px-4 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-lg font-semibold transition-all"
+                  >
+                    Upgrade to Business
+                  </button>
+                </div>
+              </div>
+
+              {/* Feature Comparison Table */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <h3 className="text-xl font-bold text-white mb-6">Feature Comparison</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-800">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium">Feature</th>
+                        <th className="text-center py-3 px-4 text-slate-400 font-medium">Starter</th>
+                        <th className="text-center py-3 px-4 text-purple-400 font-medium">Pro</th>
+                        <th className="text-center py-3 px-4 text-yellow-500 font-medium">Business</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Orders per month</td>
+                        <td className="py-3 px-4 text-center text-slate-400">25</td>
+                        <td className="py-3 px-4 text-center text-white font-semibold">Unlimited</td>
+                        <td className="py-3 px-4 text-center text-white font-semibold">Unlimited</td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Team members</td>
+                        <td className="py-3 px-4 text-center text-slate-400">1</td>
+                        <td className="py-3 px-4 text-center text-white">5</td>
+                        <td className="py-3 px-4 text-center text-white font-semibold">Unlimited</td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Storage</td>
+                        <td className="py-3 px-4 text-center text-slate-400">100MB</td>
+                        <td className="py-3 px-4 text-center text-white">10GB</td>
+                        <td className="py-3 px-4 text-center text-white">100GB</td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Client management</td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-blue-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-purple-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Invoicing & payments</td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-purple-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Time tracking</td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-purple-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Custom branding</td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-purple-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Email notifications</td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-purple-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">API access</td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-800/50">
+                        <td className="py-3 px-4 text-slate-300">Advanced automation</td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-3 px-4 text-slate-300">Dedicated account manager</td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <svg className="w-5 h-5 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* FAQ Section */}
+              <div className="mt-12 bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <h3 className="text-xl font-bold text-white mb-6">Frequently Asked Questions</h3>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-white font-semibold mb-2">Can I change plans later?</h4>
+                    <p className="text-slate-400 text-sm">Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate any charges.</p>
+                  </div>
+                  <div>
+                    <h4 className="text-white font-semibold mb-2">What payment methods do you accept?</h4>
+                    <p className="text-slate-400 text-sm">We accept all major credit cards (Visa, MasterCard, American Express) through Stripe. Business plans can also pay via invoice.</p>
+                  </div>
+                  <div>
+                    <h4 className="text-white font-semibold mb-2">Is there a contract or can I cancel anytime?</h4>
+                    <p className="text-slate-400 text-sm">No contracts required! All plans are month-to-month and you can cancel anytime. Your data remains accessible for 30 days after cancellation.</p>
+                  </div>
+                  <div>
+                    <h4 className="text-white font-semibold mb-2">What happens if I exceed my plan limits?</h4>
+                    <p className="text-slate-400 text-sm">We'll notify you when you're approaching your limits. On the free plan, you'll be prompted to upgrade. Pro and Business plans have unlimited orders.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Timesheets View */}
+          {currentView === 'timesheets' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Timesheet Reports</h2>
+                  <p className="text-slate-400">Track and analyze time entries across all orders</p>
+                </div>
+                <button
+                  onClick={() => {
+                    // Get all time entries from all orders
+                    const allEntries = []
+                    orders.forEach(order => {
+                      if (order.timeEntries && order.timeEntries.length > 0) {
+                        order.timeEntries.forEach(entry => {
+                          allEntries.push({
+                            ...entry,
+                            orderNumber: order.orderNumber,
+                            orderId: order.id,
+                            clientName: clients.find(c => c.id === order.clientId)?.name || 'Unknown'
+                          })
+                        })
+                      }
+                    })
+
+                    // Apply filters
+                    let filteredEntries = allEntries
+
+                    if (timesheetFilters.search) {
+                      const search = timesheetFilters.search.toLowerCase()
+                      filteredEntries = filteredEntries.filter(e => 
+                        e.description?.toLowerCase().includes(search) ||
+                        e.orderNumber.toLowerCase().includes(search) ||
+                        e.clientName.toLowerCase().includes(search)
+                      )
+                    }
+
+                    if (timesheetFilters.orderId && timesheetFilters.orderId !== 'all') {
+                      filteredEntries = filteredEntries.filter(e => e.orderId === timesheetFilters.orderId)
+                    }
+
+                    if (timesheetFilters.userId && timesheetFilters.userId !== 'all') {
+                      filteredEntries = filteredEntries.filter(e => e.user === timesheetFilters.userId)
+                    }
+
+                    if (timesheetFilters.startDate) {
+                      filteredEntries = filteredEntries.filter(e => 
+                        new Date(e.startTime) >= new Date(timesheetFilters.startDate)
+                      )
+                    }
+
+                    if (timesheetFilters.endDate) {
+                      filteredEntries = filteredEntries.filter(e => 
+                        new Date(e.endTime) <= new Date(timesheetFilters.endDate + 'T23:59:59')
+                      )
+                    }
+
+                    // Generate CSV
+                    const headers = ['Date', 'Order', 'Client', 'User', 'Description', 'Duration (Hours)', 'Hourly Rate', 'Amount']
+                    const rows = filteredEntries.map(entry => [
+                      new Date(entry.startTime).toLocaleDateString(),
+                      entry.orderNumber,
+                      entry.clientName,
+                      entry.user || 'Unknown',
+                      entry.description || 'No description',
+                      (entry.duration / (1000 * 60 * 60)).toFixed(2),
+                      entry.hourlyRate || 0,
+                      ((entry.duration / (1000 * 60 * 60)) * (entry.hourlyRate || 0)).toFixed(2)
+                    ])
+
+                    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\\n')
+                    const blob = new Blob([csv], { type: 'text/csv' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `timesheet-${new Date().toISOString().split('T')[0]}.csv`
+                    a.click()
+                  }}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  <span>Export CSV</span>
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-6">
+                <h3 className="text-white font-semibold mb-4">Filters</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  {/* Search */}
+                  <div>
+                    <label className="block text-slate-300 mb-2 text-sm">Search</label>
+                    <input
+                      type="text"
+                      value={timesheetFilters.search}
+                      onChange={(e) => setTimesheetFilters({...timesheetFilters, search: e.target.value})}
+                      placeholder="Order, client, description..."
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Start Date */}
+                  <div>
+                    <label className="block text-slate-300 mb-2 text-sm">Start Date</label>
+                    <input
+                      type="date"
+                      value={timesheetFilters.startDate}
+                      onChange={(e) => setTimesheetFilters({...timesheetFilters, startDate: e.target.value})}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* End Date */}
+                  <div>
+                    <label className="block text-slate-300 mb-2 text-sm">End Date</label>
+                    <input
+                      type="date"
+                      value={timesheetFilters.endDate}
+                      onChange={(e) => setTimesheetFilters({...timesheetFilters, endDate: e.target.value})}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Order Filter */}
+                  <div>
+                    <label className="block text-slate-300 mb-2 text-sm">Order</label>
+                    <select
+                      value={timesheetFilters.orderId}
+                      onChange={(e) => setTimesheetFilters({...timesheetFilters, orderId: e.target.value})}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="all">All Orders</option>
+                      {orders.filter(o => o.timeEntries && o.timeEntries.length > 0).map(order => (
+                        <option key={order.id} value={order.id}>{order.orderNumber}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* User Filter */}
+                  <div>
+                    <label className="block text-slate-300 mb-2 text-sm">User</label>
+                    <select
+                      value={timesheetFilters.userId}
+                      onChange={(e) => setTimesheetFilters({...timesheetFilters, userId: e.target.value})}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="all">All Users</option>
+                      {users.map(user => (
+                        <option key={user.id} value={user.name}>{user.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Clear Filters */}
+                {(timesheetFilters.search || timesheetFilters.startDate || timesheetFilters.endDate || timesheetFilters.orderId !== 'all' || timesheetFilters.userId !== 'all') && (
+                  <button
+                    onClick={() => setTimesheetFilters({ search: '', startDate: '', endDate: '', orderId: 'all', userId: 'all' })}
+                    className="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-white text-sm"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+
+              {/* Analytics Cards */}
+              {(() => {
+                // Get all time entries
+                const allEntries = []
+                orders.forEach(order => {
+                  if (order.timeEntries && order.timeEntries.length > 0) {
+                    order.timeEntries.forEach(entry => {
+                      allEntries.push({
+                        ...entry,
+                        orderNumber: order.orderNumber,
+                        orderId: order.id,
+                        clientName: clients.find(c => c.id === order.clientId)?.name || 'Unknown'
+                      })
+                    })
+                  }
+                })
+
+                // Apply filters
+                let filteredEntries = allEntries
+
+                if (timesheetFilters.search) {
+                  const search = timesheetFilters.search.toLowerCase()
+                  filteredEntries = filteredEntries.filter(e => 
+                    e.description?.toLowerCase().includes(search) ||
+                    e.orderNumber.toLowerCase().includes(search) ||
+                    e.clientName.toLowerCase().includes(search)
+                  )
+                }
+
+                if (timesheetFilters.orderId && timesheetFilters.orderId !== 'all') {
+                  filteredEntries = filteredEntries.filter(e => e.orderId === timesheetFilters.orderId)
+                }
+
+                if (timesheetFilters.userId && timesheetFilters.userId !== 'all') {
+                  filteredEntries = filteredEntries.filter(e => e.user === timesheetFilters.userId)
+                }
+
+                if (timesheetFilters.startDate) {
+                  filteredEntries = filteredEntries.filter(e => 
+                    new Date(e.startTime) >= new Date(timesheetFilters.startDate)
+                  )
+                }
+
+                if (timesheetFilters.endDate) {
+                  filteredEntries = filteredEntries.filter(e => 
+                    new Date(e.endTime) <= new Date(timesheetFilters.endDate + 'T23:59:59')
+                  )
+                }
+
+                const totalHours = filteredEntries.reduce((sum, e) => sum + e.duration, 0) / (1000 * 60 * 60)
+                const totalAmount = filteredEntries.reduce((sum, e) => sum + ((e.duration / (1000 * 60 * 60)) * (e.hourlyRate || 0)), 0)
+                const avgHourlyRate = filteredEntries.length > 0 ? filteredEntries.reduce((sum, e) => sum + (e.hourlyRate || 0), 0) / filteredEntries.length : 0
+
+                return (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                      {/* Total Entries */}
+                      <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6">
+                        <div className="text-blue-100 text-sm mb-1">Total Entries</div>
+                        <div className="text-2xl font-bold text-white">{filteredEntries.length}</div>
+                      </div>
+
+                      {/* Total Hours */}
+                      <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-xl p-6">
+                        <div className="text-green-100 text-sm mb-1">Total Hours</div>
+                        <div className="text-2xl font-bold text-white">{totalHours.toFixed(2)}</div>
+                      </div>
+
+                      {/* Billable Amount */}
+                      <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl p-6">
+                        <div className="text-purple-100 text-sm mb-1">Billable Amount</div>
+                        <div className="text-2xl font-bold text-white">{formatMoney(totalAmount)}</div>
+                      </div>
+
+                      {/* Avg Rate */}
+                      <div className="bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl p-6">
+                        <div className="text-amber-100 text-sm mb-1">Avg Hourly Rate</div>
+                        <div className="text-2xl font-bold text-white">{formatMoney(avgHourlyRate)}</div>
+                      </div>
+                    </div>
+
+                    {/* Time Entries Table */}
+                    {filteredEntries.length === 0 ? (
+                      <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
+                        <svg className="w-16 h-16 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h3 className="text-xl font-bold text-white mb-2">No Time Entries</h3>
+                        <p className="text-slate-400">Start tracking time on your orders to see entries here</p>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-slate-800/50">
+                              <tr>
+                                <th className="text-left p-4 text-slate-300 font-medium text-sm">Date</th>
+                                <th className="text-left p-4 text-slate-300 font-medium text-sm">Order</th>
+                                <th className="text-left p-4 text-slate-300 font-medium text-sm">Client</th>
+                                <th className="text-left p-4 text-slate-300 font-medium text-sm">User</th>
+                                <th className="text-left p-4 text-slate-300 font-medium text-sm">Description</th>
+                                <th className="text-right p-4 text-slate-300 font-medium text-sm">Duration</th>
+                                <th className="text-right p-4 text-slate-300 font-medium text-sm">Rate</th>
+                                <th className="text-right p-4 text-slate-300 font-medium text-sm">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800">
+                              {filteredEntries.sort((a, b) => new Date(b.startTime) - new Date(a.startTime)).map(entry => {
+                                const hours = entry.duration / (1000 * 60 * 60)
+                                const amount = hours * (entry.hourlyRate || 0)
+                                
+                                return (
+                                  <tr key={entry.id} className="hover:bg-slate-800/30 transition-colors">
+                                    <td className="p-4 text-slate-300 text-sm">
+                                      {new Date(entry.startTime).toLocaleDateString()}
+                                    </td>
+                                    <td className="p-4">
+                                      <button
+                                        onClick={() => {
+                                          const order = orders.find(o => o.id === entry.orderId)
+                                          if (order) openOrderDetailModal(order)
+                                        }}
+                                        className="text-blue-400 hover:text-blue-300 font-medium text-sm"
+                                      >
+                                        {entry.orderNumber}
+                                      </button>
+                                    </td>
+                                    <td className="p-4 text-slate-300 text-sm">{entry.clientName}</td>
+                                    <td className="p-4 text-slate-300 text-sm">{entry.user || 'Unknown'}</td>
+                                    <td className="p-4 text-slate-300 text-sm">{entry.description || <span className="text-slate-500 italic">No description</span>}</td>
+                                    <td className="p-4 text-right text-slate-300 text-sm font-mono">
+                                      {formatDuration(entry.duration)}
+                                    </td>
+                                    <td className="p-4 text-right text-slate-300 text-sm">
+                                      {entry.hourlyRate ? formatMoney(entry.hourlyRate) : '-'}
+                                    </td>
+                                    <td className="p-4 text-right text-green-400 text-sm font-semibold">
+                                      {formatMoney(amount)}
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* Bids View */}
+          {currentView === 'bids' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Bids & Proposals</h2>
+                  <p className="text-slate-400">Create and manage project bids</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setModalType('newBid')
+                    setFormData({
+                      status: 'draft',
+                      items: [],
+                      subtotal: 0,
+                      tax: 0,
+                      total: 0,
+                      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                    })
+                    setShowModal(true)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>New Bid</span>
+                </button>
+              </div>
+
+              {/* Bids Grid */}
+              <div className="grid grid-cols-1 gap-4">
+                {bids.length === 0 ? (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
+                    <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">No bids yet</h3>
+                    <p className="text-slate-400 mb-4">Create your first bid to get started</p>
+                  </div>
+                ) : (
+                  bids.map(bid => (
+                    <div key={bid.id} className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-blue-500/50 transition-all">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-white font-semibold text-lg">Bid #{bid.bidNumber}</h3>
+                          <p className="text-slate-400 text-sm">{clients.find(c => c.id === bid.clientId)?.name}</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          bid.status === 'accepted' ? 'bg-green-500/20 text-green-400' :
+                          bid.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+                          bid.status === 'sent' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-slate-500/20 text-slate-400'
+                        }`}>
+                          {bid.status}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <p className="text-slate-500 text-xs mb-1">Amount</p>
+                          <p className="text-white font-semibold">${bid.total?.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-xs mb-1">Created</p>
+                          <p className="text-white text-sm">{new Date(bid.createdAt).toLocaleDateString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-xs mb-1">Valid Until</p>
+                          <p className="text-white text-sm">{new Date(bid.validUntil).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors">
+                          View Details
+                        </button>
+                        <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm transition-colors">
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Inventory View */}
+          {currentView === 'inventory' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Inventory</h2>
+                  <p className="text-slate-400">Track products and stock levels</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setModalType('newInventoryItem')
+                    setFormData({
+                      quantity: 0,
+                      lowStockAlert: 10,
+                      cost: 0,
+                      price: 0
+                    })
+                    setShowModal(true)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add Item</span>
+                </button>
+              </div>
+
+              {/* Inventory Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-slate-400 text-sm mb-1">Total Items</p>
+                  <p className="text-2xl font-bold text-white">{inventory.length}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-slate-400 text-sm mb-1">Low Stock</p>
+                  <p className="text-2xl font-bold text-yellow-400">
+                    {inventory.filter(item => item.quantity <= item.lowStockAlert).length}
+                  </p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-slate-400 text-sm mb-1">Total Value</p>
+                  <p className="text-2xl font-bold text-white">
+                    ${inventory.reduce((sum, item) => sum + (item.quantity * item.price), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-slate-400 text-sm mb-1">Out of Stock</p>
+                  <p className="text-2xl font-bold text-red-400">
+                    {inventory.filter(item => item.quantity === 0).length}
+                  </p>
+                </div>
+              </div>
+
+              {/* Inventory Table */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                {inventory.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">No inventory items yet</h3>
+                    <p className="text-slate-400 mb-4">Add your first item to start tracking inventory</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-800/50">
+                        <tr>
+                          <th className="text-left p-4 text-slate-300 font-semibold">Item</th>
+                          <th className="text-left p-4 text-slate-300 font-semibold">SKU</th>
+                          <th className="text-right p-4 text-slate-300 font-semibold">Quantity</th>
+                          <th className="text-right p-4 text-slate-300 font-semibold">Cost</th>
+                          <th className="text-right p-4 text-slate-300 font-semibold">Price</th>
+                          <th className="text-right p-4 text-slate-300 font-semibold">Value</th>
+                          <th className="text-center p-4 text-slate-300 font-semibold">Status</th>
+                          <th className="text-right p-4 text-slate-300 font-semibold">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventory.map(item => (
+                          <tr key={item.id} className="border-t border-slate-800 hover:bg-slate-800/30">
+                            <td className="p-4">
+                              <div>
+                                <p className="text-white font-medium">{item.name}</p>
+                                {item.description && (
+                                  <p className="text-slate-400 text-sm">{item.description}</p>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 text-slate-300">{item.sku || '-'}</td>
+                            <td className="p-4 text-right">
+                              <span className={`font-semibold ${
+                                item.quantity === 0 ? 'text-red-400' :
+                                item.quantity <= item.lowStockAlert ? 'text-yellow-400' :
+                                'text-white'
+                              }`}>
+                                {item.quantity}
+                              </span>
+                            </td>
+                            <td className="p-4 text-right text-slate-300">${item.cost?.toFixed(2)}</td>
+                            <td className="p-4 text-right text-white font-semibold">${item.price?.toFixed(2)}</td>
+                            <td className="p-4 text-right text-white">${(item.quantity * item.price).toFixed(2)}</td>
+                            <td className="p-4 text-center">
+                              {item.quantity === 0 ? (
+                                <span className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs font-semibold">
+                                  Out of Stock
+                                </span>
+                              ) : item.quantity <= item.lowStockAlert ? (
+                                <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs font-semibold">
+                                  Low Stock
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-semibold">
+                                  In Stock
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-4 text-right">
+                              <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+                                Edit
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Calendar View */}
+          {currentView === 'calendar' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Calendar</h2>
+                  <p className="text-slate-400">Schedule and view upcoming tasks</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setModalType('newEvent')
+                    setFormData({
+                      type: 'meeting',
+                      allDay: false
+                    })
+                    setShowModal(true)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>New Event</span>
+                </button>
+              </div>
+
+              {/* Calendar View - Month Grid */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-white">January 2026</h3>
+                  <div className="flex space-x-2">
+                    <button className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm">
+                      Previous
+                    </button>
+                    <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">
+                      Today
+                    </button>
+                    <button className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm">
+                      Next
+                    </button>
+                  </div>
+                </div>
+
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 gap-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className="text-center text-slate-400 font-semibold text-sm py-2">
+                      {day}
+                    </div>
+                  ))}
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                    <div
+                      key={day}
+                      className="aspect-square bg-slate-800/50 rounded-lg p-2 hover:bg-slate-800 cursor-pointer transition-colors"
+                    >
+                      <div className="text-white text-sm font-semibold mb-1">{day}</div>
+                      {day === 3 && (
+                        <div className="bg-blue-600 text-white text-xs rounded px-1 py-0.5 truncate">
+                          Today
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Upcoming Events */}
+                <div className="mt-6 pt-6 border-t border-slate-800">
+                  <h4 className="text-white font-semibold mb-4">Upcoming Events</h4>
+                  <div className="space-y-2">
+                    {orders.filter(o => o.dueDate).slice(0, 5).map(order => (
+                      <div key={order.id} className="flex items-center space-x-3 p-3 bg-slate-800/50 rounded-lg">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <div className="flex-1">
+                          <p className="text-white text-sm font-medium">{order.title}</p>
+                          <p className="text-slate-400 text-xs">Due: {new Date(order.dueDate).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {orders.filter(o => o.dueDate).length === 0 && (
+                      <p className="text-slate-500 text-sm text-center py-4">No upcoming events</p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </main>
@@ -4388,7 +6653,27 @@ function App() {
                               }
 
                               dataManager.orders.save(updatedOrder)
-                              setSelectedOrder(updatedOrder)
+
+                              // Log payment activity AFTER saving
+                              const activities = updatedOrder.activities || []
+                              const activity = {
+                                id: `activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                type: 'payment',
+                                entityType: 'order',
+                                entityId: selectedOrder.id,
+                                description: `Payment of ${formatMoney(amount)} received via ${formData.paymentMethod || 'stripe'}`,
+                                metadata: { amount, method: formData.paymentMethod },
+                                timestamp: new Date().toISOString(),
+                                user: currentUser?.name || 'System'
+                              }
+                              
+                              const orderWithActivity = {
+                                ...updatedOrder,
+                                activities: [activity, ...activities]
+                              }
+                              
+                              dataManager.orders.save(orderWithActivity)
+                              setSelectedOrder(orderWithActivity)
                               setFormData({...formData, showPaymentForm: false, paymentAmount: '', paymentMethod: '', paymentNotes: ''})
                               loadData()
                             }}
@@ -4538,6 +6823,572 @@ function App() {
                       rows="3"
                       placeholder="Add notes about this order..."
                     />
+                  </div>
+
+                  {/* File Attachments */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Attached Files</label>
+                    
+                    {/* File Upload Drop Zone */}
+                    <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={async (e) => {
+                        e.preventDefault()
+                        const files = Array.from(e.dataTransfer.files)
+                        const { fileHelpers } = await import('./utils/helpers')
+                        
+                        for (const file of files) {
+                          if (!fileHelpers.isValidFileType(file)) {
+                            alert(`${file.name}: Invalid file type. Allowed: images, PDFs, docs`)
+                            continue
+                          }
+                          if (!fileHelpers.isValidFileSize(file, 5)) {
+                            alert(`${file.name}: File too large. Max size: 5MB`)
+                            continue
+                          }
+                          
+                          const fileObj = await fileHelpers.createFileObject(file)
+                          const currentFiles = selectedOrder.files || []
+                          const updatedOrder = {
+                            ...selectedOrder,
+                            files: [...currentFiles, fileObj],
+                            updatedAt: new Date().toISOString()
+                          }
+                          dataManager.orders.save(updatedOrder)
+                          setSelectedOrder(updatedOrder)
+                          loadData()
+                        }
+                      }}
+                      className="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer"
+                    >
+                      <input
+                        type="file"
+                        id="orderFileUpload"
+                        multiple
+                        accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.csv"
+                        onChange={async (e) => {
+                          const files = Array.from(e.target.files)
+                          const { fileHelpers } = await import('./utils/helpers')
+                          
+                          for (const file of files) {
+                            if (!fileHelpers.isValidFileType(file)) {
+                              alert(`${file.name}: Invalid file type`)
+                              continue
+                            }
+                            if (!fileHelpers.isValidFileSize(file, 5)) {
+                              alert(`${file.name}: File too large (max 5MB)`)
+                              continue
+                            }
+                            
+                            const fileObj = await fileHelpers.createFileObject(file)
+                            const currentFiles = selectedOrder.files || []
+                            const updatedOrder = {
+                              ...selectedOrder,
+                              files: [...currentFiles, fileObj],
+                              updatedAt: new Date().toISOString()
+                            }
+                            dataManager.orders.save(updatedOrder)
+                            setSelectedOrder(updatedOrder)
+                            loadData()
+                          }
+                          e.target.value = ''
+                        }}
+                        className="hidden"
+                      />
+                      <label htmlFor="orderFileUpload" className="cursor-pointer">
+                        <svg className="w-12 h-12 mx-auto text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <p className="text-slate-400 text-sm">
+                          <span className="text-blue-400 hover:text-blue-300">Click to upload</span> or drag and drop
+                        </p>
+                        <p className="text-slate-500 text-xs mt-1">Images, PDFs, Docs up to 5MB</p>
+                      </label>
+                    </div>
+
+                    {/* Attached Files List */}
+                    {selectedOrder.files && selectedOrder.files.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {selectedOrder.files.map((file) => (
+                          <div key={file.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors">
+                            <div className="flex items-center space-x-3 flex-1 min-w-0">
+                              <div className="text-2xl flex-shrink-0">
+                                {file.type.startsWith('image/') ? '🖼️' : 
+                                 file.type === 'application/pdf' ? '📄' :
+                                 file.name.endsWith('.doc') || file.name.endsWith('.docx') ? '📝' :
+                                 file.name.endsWith('.xls') || file.name.endsWith('.xlsx') ? '📊' : '📎'}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white text-sm font-medium truncate">{file.name}</p>
+                                <p className="text-slate-400 text-xs">
+                                  {(async () => {
+                                    const { fileHelpers } = await import('./utils/helpers')
+                                    return fileHelpers.formatFileSize(file.size)
+                                  })()} · {new Date(file.uploadedAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2 flex-shrink-0">
+                              <button
+                                onClick={() => {
+                                  setPreviewFile(file)
+                                  setShowFilePreview(true)
+                                }}
+                                className="p-2 hover:bg-slate-700 rounded text-blue-400 hover:text-blue-300 transition-colors"
+                                title="Preview"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  const { fileHelpers } = await import('./utils/helpers')
+                                  fileHelpers.downloadFile(file)
+                                }}
+                                className="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
+                                title="Download"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Delete this file?')) {
+                                    const updatedFiles = selectedOrder.files.filter(f => f.id !== file.id)
+                                    const updatedOrder = {
+                                      ...selectedOrder,
+                                      files: updatedFiles,
+                                      updatedAt: new Date().toISOString()
+                                    }
+                                    dataManager.orders.save(updatedOrder)
+                                    setSelectedOrder(updatedOrder)
+                                    loadData()
+                                  }
+                                }}
+                                className="p-2 hover:bg-red-600/20 rounded text-red-400 hover:text-red-300 transition-colors"
+                                title="Delete"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Comments & Activity */}
+                  <div className="space-y-4">
+                    {/* Internal Comments */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-3">Internal Comments</label>
+                      
+                      {/* Add Comment Form */}
+                      <div className="mb-3 bg-slate-800 border border-slate-700 rounded-lg p-3">
+                        <textarea
+                          value={formData.newComment || ''}
+                          onChange={(e) => setFormData({...formData, newComment: e.target.value})}
+                          placeholder="Add a comment about this order..."
+                          className="w-full p-3 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-blue-500 focus:outline-none text-sm"
+                          rows="3"
+                        />
+                        
+                        {/* Image Preview */}
+                        {formData.commentImages && formData.commentImages.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {formData.commentImages.map((img, index) => (
+                              <div key={index} className="relative group">
+                                <img 
+                                  src={img} 
+                                  alt={`Upload ${index + 1}`}
+                                  className="w-20 h-20 object-cover rounded border border-slate-600"
+                                />
+                                <button
+                                  onClick={() => {
+                                    const newImages = formData.commentImages.filter((_, i) => i !== index)
+                                    setFormData({...formData, commentImages: newImages})
+                                  }}
+                                  className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center justify-between mt-2">
+                          <div className="flex items-center space-x-2">
+                            <label className="cursor-pointer px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs flex items-center space-x-1 transition-colors">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span>Attach Images</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => {
+                                  const files = Array.from(e.target.files)
+                                  files.forEach(file => {
+                                    const reader = new FileReader()
+                                    reader.onload = (event) => {
+                                      setFormData({
+                                        ...formData,
+                                        commentImages: [...(formData.commentImages || []), event.target.result]
+                                      })
+                                    }
+                                    reader.readAsDataURL(file)
+                                  })
+                                  e.target.value = '' // Reset input
+                                }}
+                                className="hidden"
+                              />
+                            </label>
+                            {formData.commentImages && formData.commentImages.length > 0 && (
+                              <span className="text-xs text-slate-400">
+                                {formData.commentImages.length} image(s)
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (formData.newComment?.trim() || (formData.commentImages && formData.commentImages.length > 0)) {
+                                addComment(selectedOrder.id, formData.newComment || '', formData.commentImages || [])
+                                setFormData({...formData, newComment: '', commentImages: []})
+                              }
+                            }}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition-colors flex items-center space-x-1"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                            <span>Post Comment</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Comments List */}
+                      {selectedOrder.comments && selectedOrder.comments.length > 0 && (
+                        <div className="space-y-3">
+                          {selectedOrder.comments.map((comment) => (
+                            <div key={comment.id} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                    {comment.user?.charAt(0) || 'U'}
+                                  </div>
+                                  <div>
+                                    <p className="text-white text-sm font-medium">{comment.user}</p>
+                                    <p className="text-slate-400 text-xs">
+                                      {new Date(comment.timestamp).toLocaleString()}
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Delete this comment?')) {
+                                      deleteComment(selectedOrder.id, comment.id)
+                                      const updatedOrder = orders.find(o => o.id === selectedOrder.id)
+                                      if (updatedOrder) setSelectedOrder(updatedOrder)
+                                    }
+                                  }}
+                                  className="p-1 hover:bg-red-600/20 rounded text-red-400"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                              {comment.text && (
+                                <p className="text-slate-300 text-sm mb-2 whitespace-pre-wrap">{comment.text}</p>
+                              )}
+                              {comment.images && comment.images.length > 0 && (
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                  {comment.images.map((img, idx) => (
+                                    <div key={idx} className="relative group cursor-pointer">
+                                      <img 
+                                        src={img} 
+                                        alt={`Attachment ${idx + 1}`}
+                                        className="w-full h-32 object-cover rounded border border-slate-600 hover:border-blue-500 transition-colors"
+                                        onClick={() => {
+                                          // Open image in new tab for full view
+                                          window.open(img, '_blank')
+                                        }}
+                                      />
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded transition-all flex items-center justify-center">
+                                        <svg className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                                        </svg>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Receipts Scanner */}
+                    <div className="border-t border-slate-800 pt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="block text-sm font-medium text-slate-300 flex items-center space-x-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>Receipts & Documents</span>
+                        </label>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files)
+                              if (files.length > 0) {
+                                // Handle receipt upload
+                                files.forEach(file => {
+                                  const reader = new FileReader()
+                                  reader.onloadend = () => {
+                                    const receipt = {
+                                      id: `receipt_${Date.now()}_${Math.random()}`,
+                                      name: file.name,
+                                      type: file.type,
+                                      size: file.size,
+                                      url: reader.result,
+                                      uploadedAt: new Date().toISOString(),
+                                      uploadedBy: currentUser.name
+                                    }
+                                    const currentReceipts = selectedOrder.receipts || []
+                                    const updatedOrder = {
+                                      ...selectedOrder,
+                                      receipts: [...currentReceipts, receipt]
+                                    }
+                                    setSelectedOrder(updatedOrder)
+                                    
+                                    // Update orders array
+                                    const updatedOrders = orders.map(o => 
+                                      o.id === updatedOrder.id ? updatedOrder : o
+                                    )
+                                    setOrders(updatedOrders)
+                                    dataManager.saveOrders(updatedOrders)
+                                    
+                                    // Add activity
+                                    addActivity(updatedOrder.id, 'file_upload', `Uploaded receipt: ${file.name}`)
+                                  }
+                                  reader.readAsDataURL(file)
+                                })
+                                e.target.value = ''
+                              }
+                            }}
+                          />
+                          <span className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1 transition-colors">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>Upload</span>
+                          </span>
+                        </label>
+                      </div>
+
+                      {selectedOrder.receipts && selectedOrder.receipts.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedOrder.receipts.map(receipt => (
+                            <div key={receipt.id} className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800/30 border border-slate-700/50 hover:bg-slate-800/50 transition-colors group">
+                              {/* File icon/preview */}
+                              <div className="flex-shrink-0">
+                                {receipt.type.startsWith('image/') ? (
+                                  <img 
+                                    src={receipt.url} 
+                                    alt={receipt.name}
+                                    className="w-12 h-12 object-cover rounded cursor-pointer"
+                                    onClick={() => window.open(receipt.url, '_blank')}
+                                  />
+                                ) : (
+                                  <div className="w-12 h-12 bg-red-500/20 rounded flex items-center justify-center">
+                                    <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* File info */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">{receipt.name}</p>
+                                <div className="flex items-center space-x-2 text-xs text-slate-400">
+                                  <span>{(receipt.size / 1024).toFixed(1)} KB</span>
+                                  <span>•</span>
+                                  <span>{new Date(receipt.uploadedAt).toLocaleDateString()}</span>
+                                  <span>•</span>
+                                  <span>{receipt.uploadedBy}</span>
+                                </div>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => window.open(receipt.url, '_blank')}
+                                  className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded transition-colors"
+                                  title="View"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                </button>
+                                <a
+                                  href={receipt.url}
+                                  download={receipt.name}
+                                  className="p-1.5 text-green-400 hover:bg-green-500/20 rounded transition-colors"
+                                  title="Download"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                  </svg>
+                                </a>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Delete this receipt?')) {
+                                      const updatedReceipts = selectedOrder.receipts.filter(r => r.id !== receipt.id)
+                                      const updatedOrder = {
+                                        ...selectedOrder,
+                                        receipts: updatedReceipts
+                                      }
+                                      setSelectedOrder(updatedOrder)
+                                      
+                                      const updatedOrders = orders.map(o => 
+                                        o.id === updatedOrder.id ? updatedOrder : o
+                                      )
+                                      setOrders(updatedOrders)
+                                      dataManager.saveOrders(updatedOrders)
+                                    }
+                                  }}
+                                  className="p-1.5 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+                                  title="Delete"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 bg-slate-800/30 rounded-lg border border-dashed border-slate-700">
+                          <svg className="w-12 h-12 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <p className="text-slate-400 text-sm mb-2">No receipts uploaded yet</p>
+                          <p className="text-slate-500 text-xs">Upload receipts, invoices, or other documents</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Activity Timeline */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="block text-sm font-medium text-slate-300">Activity Timeline</label>
+                        {selectedOrder.activities && selectedOrder.activities.length > 0 && (
+                          <span className="text-xs text-slate-500">
+                            {selectedOrder.activities.length} {selectedOrder.activities.length === 1 ? 'event' : 'events'}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {selectedOrder.activities && selectedOrder.activities.length > 0 ? (
+                        <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
+                          {selectedOrder.activities.map((activity) => (
+                            <div key={activity.id} className="flex items-start space-x-3 p-3 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 border border-slate-700/50 transition-colors">
+                              <div className="flex-shrink-0 mt-0.5">
+                                {activity.type === 'status_change' && (
+                                  <div className="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                )}
+                                {activity.type === 'payment' && (
+                                  <div className="w-8 h-8 bg-green-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                )}
+                                {activity.type === 'comment' && (
+                                  <div className="w-8 h-8 bg-purple-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                  </div>
+                                )}
+                                {activity.type === 'file_upload' && (
+                                  <div className="w-8 h-8 bg-amber-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                    </svg>
+                                  </div>
+                                )}
+                                {activity.type === 'updated' && (
+                                  <div className="w-8 h-8 bg-orange-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </div>
+                                )}
+                                {activity.type === 'time_entry' && (
+                                  <div className="w-8 h-8 bg-cyan-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                )}
+                                {activity.type === 'created' && (
+                                  <div className="w-8 h-8 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                  </div>
+                                )}
+                                {!['status_change', 'payment', 'comment', 'file_upload', 'updated', 'time_entry', 'created'].includes(activity.type) && (
+                                  <div className="w-8 h-8 bg-slate-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-slate-200 text-sm font-medium">{activity.description}</p>
+                                <div className="flex items-center space-x-2 mt-1">
+                                  <span className="text-slate-400 text-xs">{activity.user}</span>
+                                  <span className="text-slate-600">•</span>
+                                  <span className="text-slate-500 text-xs">
+                                    {new Date(activity.timestamp).toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 bg-slate-800/20 rounded-lg border border-slate-700/50">
+                          <svg className="w-12 h-12 text-slate-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <p className="text-slate-500 text-sm">No activity yet</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 
@@ -5761,6 +8612,101 @@ function App() {
                   </div>
                 </div>
 
+                {/* Rush Fee & Revisions */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Rush Fee</label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={invoiceData.rushFeeValue || 0}
+                        onChange={(e) => setInvoiceData({
+                          ...invoiceData,
+                          rushFeeValue: parseFloat(e.target.value) || 0
+                        })}
+                        className="flex-1 p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                        placeholder="0"
+                      />
+                      <select
+                        value={invoiceData.rushFeeType || 'percentage'}
+                        onChange={(e) => setInvoiceData({
+                          ...invoiceData,
+                          rushFeeType: e.target.value
+                        })}
+                        className="p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="percentage">%</option>
+                        <option value="flat">$</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Revision Tracking</label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="number"
+                        min="0"
+                        value={invoiceData.revisionsIncluded || 3}
+                        onChange={(e) => setInvoiceData({
+                          ...invoiceData,
+                          revisionsIncluded: parseInt(e.target.value) || 0
+                        })}
+                        className="w-20 p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none text-center"
+                        placeholder="3"
+                      />
+                      <span className="flex items-center text-slate-400 text-sm">included</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={invoiceData.additionalRevisionFee || 0}
+                        onChange={(e) => setInvoiceData({
+                          ...invoiceData,
+                          additionalRevisionFee: parseFloat(e.target.value) || 0
+                        })}
+                        className="flex-1 p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                        placeholder="Additional fee"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Usage Rights (for Creative work) */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Usage Rights & Licensing</label>
+                  <select
+                    value={invoiceData.usageRights || 'none'}
+                    onChange={(e) => setInvoiceData({
+                      ...invoiceData,
+                      usageRights: e.target.value
+                    })}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="none">No specific rights</option>
+                    <option value="personal">Personal Use Only</option>
+                    <option value="commercial">Commercial License</option>
+                    <option value="editorial">Editorial Use</option>
+                    <option value="exclusive">Exclusive Rights</option>
+                    <option value="limited">Limited License (1 year)</option>
+                    <option value="unlimited">Unlimited License</option>
+                  </select>
+                </div>
+
+                {/* Deliverable Specifications */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Deliverable Specifications</label>
+                  <textarea
+                    value={invoiceData.deliverableSpecs || ''}
+                    onChange={(e) => setInvoiceData({
+                      ...invoiceData,
+                      deliverableSpecs: e.target.value
+                    })}
+                    placeholder="e.g., File formats: PNG, JPG, AI&#10;Resolution: 300dpi, 4K&#10;Dimensions: 1920x1080&#10;Quantity: 10 final images"
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none text-sm"
+                    rows="4"
+                  />
+                </div>
+
                 {/* Due Date & Payment Terms */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -5832,9 +8778,14 @@ function App() {
                               ? (subtotal * invoiceData.discountValue / 100)
                               : invoiceData.discountValue)
                             : 0;
-                          const afterDiscount = subtotal - discount;
-                          const tax = invoiceData.taxRate > 0 ? (afterDiscount * (invoiceData.taxRate / 100)) : 0;
-                          const total = afterDiscount + tax;
+                          const rushFee = invoiceData.rushFeeValue > 0
+                            ? (invoiceData.rushFeeType === 'percentage'
+                              ? (subtotal * invoiceData.rushFeeValue / 100)
+                              : invoiceData.rushFeeValue)
+                            : 0;
+                          const afterAdjustments = subtotal - discount + rushFee;
+                          const tax = invoiceData.taxRate > 0 ? (afterAdjustments * (invoiceData.taxRate / 100)) : 0;
+                          const total = afterAdjustments + tax;
                           const balance = total - (invoiceData.depositPaid || 0);
                           return Math.max(0, balance).toFixed(2);
                         })()}
@@ -5849,7 +8800,18 @@ function App() {
                     
                     if (daysOverdue > 0 && invoiceData.enableLateFee) {
                       const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                      const lateFee = subtotal * ((invoiceData.lateFeePercent || 5) / 100);
+                      const discount = invoiceData.discountValue > 0 
+                        ? (invoiceData.discountType === 'percentage' 
+                          ? (subtotal * invoiceData.discountValue / 100)
+                          : invoiceData.discountValue)
+                        : 0;
+                      const rushFee = invoiceData.rushFeeValue > 0
+                        ? (invoiceData.rushFeeType === 'percentage'
+                          ? (subtotal * invoiceData.rushFeeValue / 100)
+                          : invoiceData.rushFeeValue)
+                        : 0;
+                      const afterAdjustments = subtotal - discount + rushFee;
+                      const lateFee = afterAdjustments * ((invoiceData.lateFeePercent || 5) / 100);
                       return (
                         <div className="bg-red-900/20 border border-red-700 rounded p-2 text-xs">
                           <span className="text-red-400 font-semibold">⚠️ {daysOverdue} days overdue</span>
@@ -6057,10 +9019,15 @@ function App() {
                                   ? (subtotal * invoiceData.discountValue / 100)
                                   : invoiceData.discountValue)
                                 : 0;
-                              const afterDiscount = subtotal - discount;
-                              const tax = invoiceData.taxRate > 0 ? (afterDiscount * (invoiceData.taxRate / 100)) : 0;
+                              const rushFee = invoiceData.rushFeeValue > 0
+                                ? (invoiceData.rushFeeType === 'percentage'
+                                  ? (subtotal * invoiceData.rushFeeValue / 100)
+                                  : invoiceData.rushFeeValue)
+                                : 0;
+                              const afterAdjustments = subtotal - discount + rushFee;
+                              const tax = invoiceData.taxRate > 0 ? (afterAdjustments * (invoiceData.taxRate / 100)) : 0;
                               const feeAmount = (subtotal * (totalFeeRate / 100)) + totalFixedFee;
-                              const total = afterDiscount + tax + feeAmount;
+                              const total = afterAdjustments + tax + feeAmount;
                               return total.toFixed(2);
                             })()}</span>
                           </div>
@@ -6260,20 +9227,50 @@ function App() {
                         </div>
                       </div>
                     ))}
-                    <button
-                      onClick={() => {
-                        const newItems = [...invoiceData.items, {
-                          id: `item_${Date.now()}`,
-                          description: 'New Item',
-                          quantity: 1,
-                          price: 0
-                        }];
-                        setInvoiceData({...invoiceData, items: newItems});
-                      }}
-                      className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition-colors"
-                    >
-                      + Add Item
-                    </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          const newItems = [...invoiceData.items, {
+                            id: `item_${Date.now()}`,
+                            description: 'New Item',
+                            quantity: 1,
+                            price: 0
+                          }];
+                          setInvoiceData({...invoiceData, items: newItems});
+                        }}
+                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition-colors"
+                      >
+                        + Add Item
+                      </button>
+                      <button
+                        onClick={() => {
+                          // Import time entries from this order
+                          const order = invoiceData.order
+                          if (order.timeEntries && order.timeEntries.length > 0) {
+                            const timeItems = order.timeEntries.map(entry => {
+                              const hours = entry.duration / (1000 * 60 * 60)
+                              return {
+                                id: `time_${entry.id}`,
+                                description: `${entry.description || 'Time Entry'} (${formatDuration(entry.duration)})`,
+                                quantity: parseFloat(hours.toFixed(2)),
+                                price: entry.hourlyRate || 0
+                              }
+                            })
+                            setInvoiceData({...invoiceData, items: [...invoiceData.items, ...timeItems]})
+                            alert(`Imported ${timeItems.length} time entries`)
+                          } else {
+                            alert('No time entries found for this order')
+                          }
+                        }}
+                        className="p-2 bg-green-600 hover:bg-green-700 rounded-lg text-white text-sm font-medium transition-colors flex items-center justify-center space-x-1"
+                        title="Import time entries as line items"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Import Time</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -6546,6 +9543,20 @@ function App() {
                             </div>
                           )}
                           
+                          {/* Rush Fee */}
+                          {invoiceData.rushFeeValue > 0 && (
+                            <div className="flex justify-between py-2 border-b border-gray-200 text-orange-600">
+                              <span>Rush Fee {invoiceData.rushFeeType === 'percentage' ? `(${invoiceData.rushFeeValue}%)` : ''}:</span>
+                              <span>+${(() => {
+                                const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                                const rushFee = invoiceData.rushFeeType === 'percentage' 
+                                  ? (subtotal * invoiceData.rushFeeValue / 100)
+                                  : invoiceData.rushFeeValue;
+                                return rushFee.toFixed(2);
+                              })()}</span>
+                            </div>
+                          )}
+                          
                           {/* Tax */}
                           {invoiceData.taxRate > 0 && (
                             <div className="flex justify-between py-2 border-b border-gray-200">
@@ -6557,8 +9568,13 @@ function App() {
                                     ? (subtotal * invoiceData.discountValue / 100)
                                     : invoiceData.discountValue)
                                   : 0;
-                                const afterDiscount = subtotal - discount;
-                                const tax = afterDiscount * (invoiceData.taxRate / 100);
+                                const rushFee = invoiceData.rushFeeValue > 0
+                                  ? (invoiceData.rushFeeType === 'percentage'
+                                    ? (subtotal * invoiceData.rushFeeValue / 100)
+                                    : invoiceData.rushFeeValue)
+                                  : 0;
+                                const afterAdjustments = subtotal - discount + rushFee;
+                                const tax = afterAdjustments * (invoiceData.taxRate / 100);
                                 return tax.toFixed(2);
                               })()}</span>
                             </div>
@@ -6605,8 +9621,13 @@ function App() {
                                   ? (subtotal * invoiceData.discountValue / 100)
                                   : invoiceData.discountValue)
                                 : 0;
-                              const afterDiscount = subtotal - discount;
-                              const tax = invoiceData.taxRate > 0 ? (afterDiscount * (invoiceData.taxRate / 100)) : 0;
+                              const rushFee = invoiceData.rushFeeValue > 0
+                                ? (invoiceData.rushFeeType === 'percentage'
+                                  ? (subtotal * invoiceData.rushFeeValue / 100)
+                                  : invoiceData.rushFeeValue)
+                                : 0;
+                              const afterAdjustments = subtotal - discount + rushFee;
+                              const tax = invoiceData.taxRate > 0 ? (afterAdjustments * (invoiceData.taxRate / 100)) : 0;
                               
                               // Add processing fees if enabled
                               let processingFee = 0;
@@ -6629,7 +9650,7 @@ function App() {
                                 processingFee = (subtotal * (totalFeeRate / 100)) + totalFixedFee;
                               }
                               
-                              const total = afterDiscount + tax + processingFee;
+                              const total = afterAdjustments + tax + processingFee;
                               return total.toFixed(2);
                             })()}</span>
                           </div>
@@ -6650,8 +9671,13 @@ function App() {
                                       ? (subtotal * invoiceData.discountValue / 100)
                                       : invoiceData.discountValue)
                                     : 0;
-                                  const afterDiscount = subtotal - discount;
-                                  const tax = invoiceData.taxRate > 0 ? (afterDiscount * (invoiceData.taxRate / 100)) : 0;
+                                  const rushFee = invoiceData.rushFeeValue > 0
+                                    ? (invoiceData.rushFeeType === 'percentage'
+                                      ? (subtotal * invoiceData.rushFeeValue / 100)
+                                      : invoiceData.rushFeeValue)
+                                    : 0;
+                                  const afterAdjustments = subtotal - discount + rushFee;
+                                  const tax = invoiceData.taxRate > 0 ? (afterAdjustments * (invoiceData.taxRate / 100)) : 0;
                                   
                                   // Add processing fees if enabled
                                   let processingFee = 0;
@@ -6674,7 +9700,7 @@ function App() {
                                     processingFee = (subtotal * (totalFeeRate / 100)) + totalFixedFee;
                                   }
                                   
-                                  const total = afterDiscount + tax + processingFee;
+                                  const total = afterAdjustments + tax + processingFee;
                                   const balance = total - (invoiceData.depositPaid || 0);
                                   return Math.max(0, balance).toFixed(2);
                                 })()}</span>
@@ -6743,6 +9769,42 @@ function App() {
                       </div>
                     )}
 
+                    {/* Usage Rights & License */}
+                    {invoiceData.usageRights && invoiceData.usageRights !== 'none' && (
+                      <div className="bg-blue-50 p-6 rounded-lg mb-6 border-l-4" style={{borderColor: invoiceData.colors.accent}}>
+                        <h3 className="text-sm font-bold uppercase mb-2" style={{color: invoiceData.colors.primary}}>Usage Rights & Licensing</h3>
+                        <p className="text-gray-700 font-semibold">
+                          {invoiceData.usageRights === 'personal' && 'Personal Use Only'}
+                          {invoiceData.usageRights === 'commercial' && 'Commercial License Granted'}
+                          {invoiceData.usageRights === 'editorial' && 'Editorial Use Only'}
+                          {invoiceData.usageRights === 'exclusive' && 'Exclusive Rights Transfer'}
+                          {invoiceData.usageRights === 'limited' && 'Limited License (1 Year)'}
+                          {invoiceData.usageRights === 'unlimited' && 'Unlimited License'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Deliverable Specifications */}
+                    {invoiceData.deliverableSpecs && invoiceData.deliverableSpecs.trim() && (
+                      <div className="bg-gray-50 p-6 rounded-lg mb-6">
+                        <h3 className="text-sm font-bold uppercase mb-2" style={{color: invoiceData.colors.primary}}>Deliverable Specifications</h3>
+                        <pre className="text-gray-600 text-sm whitespace-pre-wrap font-sans">{invoiceData.deliverableSpecs}</pre>
+                      </div>
+                    )}
+
+                    {/* Revision Policy */}
+                    {invoiceData.revisionsIncluded > 0 && (
+                      <div className="bg-purple-50 p-6 rounded-lg mb-6">
+                        <h3 className="text-sm font-bold uppercase mb-2" style={{color: invoiceData.colors.primary}}>Revision Policy</h3>
+                        <p className="text-gray-700 text-sm">
+                          <strong>{invoiceData.revisionsIncluded}</strong> revision{invoiceData.revisionsIncluded !== 1 ? 's' : ''} included.
+                          {invoiceData.additionalRevisionFee > 0 && (
+                            <span className="ml-2">Additional revisions: ${invoiceData.additionalRevisionFee.toFixed(2)} each.</span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Payment Instructions */}
                     {invoiceData.sections.paymentInstructions && (
                       <div className="bg-gray-50 p-6 rounded-lg mb-6">
@@ -6768,6 +9830,570 @@ function App() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* File Preview Modal */}
+      {showFilePreview && previewFile && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowFilePreview(false)}>
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-800">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl font-bold text-white truncate">{previewFile.name}</h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  {(() => {
+                    try {
+                      const bytes = previewFile.size;
+                      if (bytes === 0) return '0 Bytes';
+                      const k = 1024;
+                      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                      const i = Math.floor(Math.log(bytes) / Math.log(k));
+                      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+                    } catch (e) {
+                      return 'Size unknown';
+                    }
+                  })()} · Uploaded {new Date(previewFile.uploadedAt).toLocaleDateString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowFilePreview(false)}
+                className="ml-4 text-slate-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] bg-slate-950">
+              {previewFile.type.startsWith('image/') ? (
+                <img 
+                  src={previewFile.data} 
+                  alt={previewFile.name}
+                  className="max-w-full h-auto mx-auto rounded-lg"
+                />
+              ) : previewFile.type === 'application/pdf' ? (
+                <iframe 
+                  src={previewFile.data}
+                  className="w-full h-[600px] rounded-lg"
+                  title={previewFile.name}
+                />
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">
+                    {previewFile.name.endsWith('.doc') || previewFile.name.endsWith('.docx') ? '📝' :
+                     previewFile.name.endsWith('.xls') || previewFile.name.endsWith('.xlsx') ? '📊' : '📎'}
+                  </div>
+                  <p className="text-slate-400 mb-4">Preview not available for this file type</p>
+                  <button
+                    onClick={async () => {
+                      const { fileHelpers } = await import('./utils/helpers')
+                      fileHelpers.downloadFile(previewFile)
+                    }}
+                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition-colors"
+                  >
+                    Download File
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-800 flex justify-between items-center">
+              <button
+                onClick={() => setShowFilePreview(false)}
+                className="px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors text-white"
+              >
+                Close
+              </button>
+              <button
+                onClick={async () => {
+                  const { fileHelpers } = await import('./utils/helpers')
+                  fileHelpers.downloadFile(previewFile)
+                }}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white flex items-center space-x-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Download</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Management Modal */}
+      {showUserModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-white">
+                {editingUser ? 'Edit User' : 'Add New User'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowUserModal(false)
+                  setEditingUser(null)
+                }}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  const formData = new FormData(e.target)
+                  const userData = {
+                    name: formData.get('name'),
+                    email: formData.get('email'),
+                    password: formData.get('password') || (editingUser?.password),
+                    role: formData.get('role'),
+                  }
+
+                  if (editingUser) {
+                    updateUser(editingUser.id, userData)
+                  } else {
+                    addUser(userData)
+                  }
+
+                  setShowUserModal(false)
+                  setEditingUser(null)
+                }}
+                className="space-y-4"
+              >
+                {/* Name */}
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">Full Name</label>
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={editingUser?.name || ''}
+                    required
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    placeholder="John Doe"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    defaultValue={editingUser?.email || ''}
+                    required
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    placeholder="john@example.com"
+                  />
+                </div>
+
+                {/* Password */}
+                {!editingUser && (
+                  <div>
+                    <label className="block text-slate-300 mb-2 text-sm">Password</label>
+                    <input
+                      type="password"
+                      name="password"
+                      required={!editingUser}
+                      className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                )}
+
+                {/* Role */}
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">Role</label>
+                  <select
+                    name="role"
+                    defaultValue={editingUser?.role || 'staff'}
+                    required
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="admin">Admin - Full Access</option>
+                    <option value="manager">Manager - Business Operations</option>
+                    <option value="staff">Staff - Basic Access</option>
+                  </select>
+                </div>
+
+                {/* Role Description */}
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <p className="text-xs text-slate-400">
+                    <strong>Admin:</strong> Full access to all features including user management and settings.<br />
+                    <strong>Manager:</strong> Can manage orders, clients, and view analytics but cannot manage users.<br />
+                    <strong>Staff:</strong> Basic access to view and create orders with limited editing capabilities.
+                  </p>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUserModal(false)
+                      setEditingUser(null)
+                    }}
+                    className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium"
+                  >
+                    {editingUser ? 'Update User' : 'Add User'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Bid Modal */}
+      {modalType === 'newBid' && showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-2xl">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">New Bid</h2>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Client *</label>
+                <select
+                  value={formData.clientId || ''}
+                  onChange={(e) => setFormData({...formData, clientId: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">Select client...</option>
+                  {clients.map(client => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Bid Title *</label>
+                <input
+                  type="text"
+                  value={formData.title || ''}
+                  onChange={(e) => setFormData({...formData, title: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  placeholder="Project name or description"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Valid Until *</label>
+                  <input
+                    type="date"
+                    value={formData.validUntil || ''}
+                    onChange={(e) => setFormData({...formData, validUntil: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
+                  <select
+                    value={formData.status || 'draft'}
+                    onChange={(e) => setFormData({...formData, status: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="sent">Sent</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                <textarea
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  rows="3"
+                  placeholder="Project details and scope..."
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Subtotal</label>
+                  <input
+                    type="number"
+                    value={formData.subtotal || 0}
+                    onChange={(e) => {
+                      const subtotal = parseFloat(e.target.value) || 0
+                      const tax = subtotal * 0.1
+                      const total = subtotal + tax
+                      setFormData({...formData, subtotal, tax, total})
+                    }}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Tax</label>
+                  <input
+                    type="number"
+                    value={formData.tax || 0}
+                    readOnly
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Total</label>
+                  <input
+                    type="number"
+                    value={formData.total || 0}
+                    readOnly
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white font-semibold"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end space-x-3">
+              <button onClick={closeModal} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleSaveBid} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                Create Bid
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Inventory Item Modal */}
+      {modalType === 'newInventoryItem' && showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-2xl">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">Add Inventory Item</h2>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Item Name *</label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  placeholder="Product name"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">SKU</label>
+                  <input
+                    type="text"
+                    value={formData.sku || ''}
+                    onChange={(e) => setFormData({...formData, sku: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                    placeholder="Stock keeping unit"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                  <select
+                    value={formData.category || ''}
+                    onChange={(e) => setFormData({...formData, category: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">Select category...</option>
+                    <option value="materials">Materials</option>
+                    <option value="tools">Tools</option>
+                    <option value="supplies">Supplies</option>
+                    <option value="finished_goods">Finished Goods</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                <textarea
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  rows="2"
+                  placeholder="Item details..."
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Quantity *</label>
+                  <input
+                    type="number"
+                    value={formData.quantity || 0}
+                    onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value) || 0})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Cost</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.cost || 0}
+                    onChange={(e) => setFormData({...formData, cost: parseFloat(e.target.value) || 0})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Price *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.price || 0}
+                    onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Low Stock Alert Threshold</label>
+                <input
+                  type="number"
+                  value={formData.lowStockAlert || 10}
+                  onChange={(e) => setFormData({...formData, lowStockAlert: parseInt(e.target.value) || 10})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  placeholder="Notify when quantity falls below..."
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end space-x-3">
+              <button onClick={closeModal} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleSaveInventoryItem} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                Add Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Event Modal */}
+      {modalType === 'newEvent' && showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-2xl">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">New Event</h2>
+              <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Event Title *</label>
+                <input
+                  type="text"
+                  value={formData.title || ''}
+                  onChange={(e) => setFormData({...formData, title: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  placeholder="Meeting, deadline, etc."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Date *</label>
+                  <input
+                    type="date"
+                    value={formData.date || ''}
+                    onChange={(e) => setFormData({...formData, date: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Time</label>
+                  <input
+                    type="time"
+                    value={formData.time || ''}
+                    onChange={(e) => setFormData({...formData, time: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                    disabled={formData.allDay}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.allDay || false}
+                  onChange={(e) => setFormData({...formData, allDay: e.target.checked})}
+                  className="mr-2"
+                />
+                <label className="text-sm text-slate-300">All day event</label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Event Type</label>
+                <select
+                  value={formData.type || 'meeting'}
+                  onChange={(e) => setFormData({...formData, type: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="meeting">Meeting</option>
+                  <option value="deadline">Deadline</option>
+                  <option value="reminder">Reminder</option>
+                  <option value="appointment">Appointment</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+                <textarea
+                  value={formData.notes || ''}
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                  rows="3"
+                  placeholder="Additional details..."
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end space-x-3">
+              <button onClick={closeModal} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleSaveEvent} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                Create Event
+              </button>
             </div>
           </div>
         </div>

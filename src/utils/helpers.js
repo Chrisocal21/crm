@@ -1,5 +1,92 @@
 import CONFIG from '../config/business-config';
 
+// File handling utilities
+export const fileHelpers = {
+  // Convert file to base64 for localStorage
+  fileToBase64: (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  },
+
+  // Validate file type
+  isValidFileType: (file, allowedTypes = ['image/*', 'application/pdf', '.doc', '.docx', '.txt', '.xlsx', '.csv']) => {
+    const fileType = file.type;
+    const fileName = file.name.toLowerCase();
+    
+    return allowedTypes.some(type => {
+      if (type.includes('*')) {
+        const prefix = type.split('/')[0];
+        return fileType.startsWith(prefix);
+      } else if (type.startsWith('.')) {
+        return fileName.endsWith(type);
+      } else {
+        return fileType === type;
+      }
+    });
+  },
+
+  // Validate file size (max 5MB by default)
+  isValidFileSize: (file, maxSizeMB = 5) => {
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
+    return file.size <= maxSizeBytes;
+  },
+
+  // Format file size for display
+  formatFileSize: (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  },
+
+  // Get file extension
+  getFileExtension: (filename) => {
+    return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2);
+  },
+
+  // Get file icon based on type
+  getFileIcon: (file) => {
+    const ext = fileHelpers.getFileExtension(file.name).toLowerCase();
+    const type = file.type;
+
+    if (type.startsWith('image/')) return '🖼️';
+    if (type === 'application/pdf') return '📄';
+    if (ext === 'doc' || ext === 'docx') return '📝';
+    if (ext === 'xls' || ext === 'xlsx' || ext === 'csv') return '📊';
+    if (ext === 'txt') return '📃';
+    if (ext === 'zip' || ext === 'rar') return '📦';
+    return '📎';
+  },
+
+  // Create file object for storage
+  createFileObject: async (file) => {
+    const base64 = await fileHelpers.fileToBase64(file);
+    return {
+      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      uploadedAt: new Date().toISOString(),
+      data: base64
+    };
+  },
+
+  // Download file from base64
+  downloadFile: (fileObj) => {
+    const link = document.createElement('a');
+    link.href = fileObj.data;
+    link.download = fileObj.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+};
+
 // ===== FORMATTING UTILITIES =====
 
 export const formatMoney = (amount, includeCurrency = true) => {
