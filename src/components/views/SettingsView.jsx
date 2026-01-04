@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 
 const SettingsView = ({
   CONFIG,
@@ -19,18 +19,127 @@ const SettingsView = ({
   loadSampleData,
   clearAllData
 }) => {
+  const [activeTab, setActiveTab] = useState('profile')
+
+  const tabs = [
+    { id: 'profile', label: 'My Profile', icon: '👤' },
+    { id: 'business', label: 'Business', icon: '🏢', adminOnly: true },
+    { id: 'preferences', label: 'Preferences', icon: '⚙️' },
+    { id: 'users', label: 'Users', icon: '👥', adminOnly: true },
+    { id: 'catalog', label: 'Catalog', icon: '📦', adminOnly: true },
+    { id: 'data', label: 'Data', icon: '💾', adminOnly: true }
+  ]
+
+  const visibleTabs = tabs.filter(tab => !tab.adminOnly || hasPermission('manageSettings'))
+
   return (
     <div>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-white">Settings</h2>
-        <p className="text-slate-400">Configure your preferences and business settings</p>
+        <p className="text-slate-400">Manage your account and application preferences</p>
       </div>
 
-      <div className="space-y-6">
-        {/* Business Profile - Admin Only */}
-        {hasPermission('manageSettings') && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <h3 className="text-xl font-bold text-white mb-4">Business Profile</h3>
+      {/* Tab Navigation */}
+      <div className="mb-6 border-b border-slate-800">
+        <div className="flex space-x-1 overflow-x-auto">
+          {visibleTabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 font-medium text-sm whitespace-nowrap transition-colors border-b-2 ${
+                activeTab === tab.id
+                  ? 'text-blue-400 border-blue-400'
+                  : 'text-slate-400 border-transparent hover:text-slate-300 hover:border-slate-700'
+              }`}
+            >
+              <span className="mr-2">{tab.icon}</span>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* Profile Tab */}
+        {activeTab === 'profile' && (
+          <>
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Personal Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">Name</label>
+                  <input
+                    type="text"
+                    defaultValue={currentUser.name}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">Email</label>
+                  <input
+                    type="email"
+                    defaultValue={currentUser.email}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">Role</label>
+                  <input
+                    type="text"
+                    value={currentUser.role}
+                    disabled
+                    className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-400 cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">&nbsp;</label>
+                  <button
+                    onClick={() => {
+                      setShowUserModal(true)
+                      setEditingUser(currentUser)
+                    }}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors text-sm"
+                  >
+                    Change Password
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Notifications</h3>
+              <div className="space-y-2">
+                <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div>
+                    <div className="text-white text-sm font-medium">Order Status Changes</div>
+                    <div className="text-xs text-slate-400">Get notified when order status updates</div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded" />
+                </label>
+                <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div>
+                    <div className="text-white text-sm font-medium">Payment Received</div>
+                    <div className="text-xs text-slate-400">Get notified when payments are recorded</div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded" />
+                </label>
+                <label className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div>
+                    <div className="text-white text-sm font-medium">Overdue Alerts</div>
+                    <div className="text-xs text-slate-400">Get notified about overdue orders and tasks</div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded" />
+                </label>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Business Tab */}
+        {activeTab === 'business' && hasPermission('manageSettings') && (
+          <>
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Business Profile</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-slate-300 mb-2 text-sm">Business Name</label>
