@@ -215,9 +215,9 @@ export const useLocalStorage = () => {
     {
       id: 'template_1',
       name: 'Quote Follow-Up',
-      subject: 'Following up on your quote for {{projectName}}',
-      body: `Hi {{clientName}},\n\nI wanted to follow up on the quote I sent you on {{quoteDate}} for {{projectName}}.\n\nThe quote of \${{amount}} is valid until {{validUntil}}. If you have any questions or would like to discuss the project further, please don't hesitate to reach out.\n\nI'd love to bring your vision to life!\n\nBest regards,\n{{businessName}}`,
-      category: 'sales',
+      subject: 'Following up on your quote - Order {{orderNumber}}',
+      body: 'Hi {{clientName}},\n\nI wanted to follow up on the quote I sent you for order {{orderNumber}}.\n\nQuoted Amount: {{quoteTotal}}\nValid Until: {{dueDate}}\n\nIf you have any questions or would like to discuss the project further, please don\'t hesitate to reach out.\n\nI\'d love to bring your vision to life!\n\nBest regards,\n{{businessName}}',
+      category: 'quote',
       createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
     },
@@ -225,7 +225,7 @@ export const useLocalStorage = () => {
       id: 'template_2',
       name: 'Order Confirmation',
       subject: 'Order Confirmed - {{orderNumber}}',
-      body: `Hi {{clientName}},\n\nThank you for your order! This email confirms that we've received your order #{{orderNumber}}.\n\nProject: {{projectDescription}}\nTotal: \${{orderTotal}}\nDeposit Paid: \${{depositAmount}}\nBalance Due: \${{balanceDue}}\n\nEstimated completion date: {{dueDate}}\n\nWe'll keep you updated on the progress. Feel free to reach out if you have any questions!\n\nThank you for your business,\n{{businessName}}`,
+      body: 'Hi {{clientName}},\n\nThank you for your order! This email confirms that we\'ve received your order #{{orderNumber}}.\n\nOrder Total: {{total}}\nDeposit Paid: {{paidAmount}}\nBalance Due: {{balanceDue}}\n\nEstimated completion date: {{dueDate}}\nCurrent Status: {{status}}\n\nWe\'ll keep you updated on the progress. Feel free to reach out if you have any questions!\n\nThank you for your business,\n{{businessName}}',
       category: 'order',
       createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString()
@@ -234,7 +234,7 @@ export const useLocalStorage = () => {
       id: 'template_3',
       name: 'Shipping Notification',
       subject: 'Your order is on the way! - {{orderNumber}}',
-      body: `Hi {{clientName}},\n\nGreat news! Your order #{{orderNumber}} has shipped and is on its way to you.\n\nTracking Number: {{trackingNumber}}\nCarrier: {{shippingCarrier}}\nEstimated Delivery: {{estimatedDelivery}}\n\nYou can track your shipment at: {{trackingUrl}}\n\nPlease inspect your order upon delivery and let us know if there are any issues.\n\nThank you,\n{{businessName}}`,
+      body: 'Hi {{clientName}},\n\nGreat news! Your order #{{orderNumber}} has shipped and is on its way to you.\n\nOrder Total: {{total}}\nExpected Delivery: {{dueDate}}\n\nPlease inspect your order upon delivery and let us know if there are any issues.\n\nThank you,\n{{businessName}}',
       category: 'shipping',
       createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString()
@@ -243,7 +243,7 @@ export const useLocalStorage = () => {
       id: 'template_4',
       name: 'Payment Reminder',
       subject: 'Payment Reminder - Order {{orderNumber}}',
-      body: `Hi {{clientName}},\n\nThis is a friendly reminder that your order #{{orderNumber}} has been completed and the final balance is due.\n\nOrder Total: \${{orderTotal}}\nPaid to Date: \${{paidAmount}}\nBalance Due: \${{balanceDue}}\n\nPayment is due by {{dueDate}}. You can pay via:\n- Credit card\n- Bank transfer\n- Check\n\nPlease let me know if you have any questions or if there are any issues with the order.\n\nThank you,\n{{businessName}}`,
+      body: 'Hi {{clientName}},\n\nThis is a friendly reminder that your order #{{orderNumber}} has been completed and the final balance is due.\n\nOrder Total: {{total}}\nPaid to Date: {{paidAmount}}\nBalance Due: {{balanceDue}}\nDue Date: {{dueDate}}\n\nYou can pay via the payment methods we discussed. Please let me know if you have any questions or if there are any issues with the order.\n\nThank you,\n{{businessName}}',
       category: 'payment',
       createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString()
@@ -252,10 +252,37 @@ export const useLocalStorage = () => {
       id: 'template_5',
       name: 'Project Update',
       subject: 'Update on your order - {{orderNumber}}',
-      body: `Hi {{clientName}},\n\nI wanted to give you a quick update on your order #{{orderNumber}}.\n\n{{updateMessage}}\n\nCurrent Status: {{currentStatus}}\nEstimated Completion: {{estimatedCompletion}}\n\nEverything is progressing well! I'll send another update soon.\n\nBest regards,\n{{businessName}}`,
+      body: 'Hi {{clientName}},\n\nI wanted to give you a quick update on your order #{{orderNumber}}.\n\nCurrent Status: {{status}}\nEstimated Completion: {{dueDate}}\n\nEverything is progressing well! I\'ll send another update soon.\n\nBest regards,\n{{businessName}}',
       category: 'update',
       createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'template_6',
+      name: 'Invoice Sent',
+      subject: 'Invoice for Order {{orderNumber}}',
+      body: 'Hi {{clientName}},\n\nThank you for your business! Please find the invoice for order #{{orderNumber}} attached.\n\nInvoice Amount: {{total}}\nAmount Paid: {{paidAmount}}\nBalance Due: {{balanceDue}}\nDue Date: {{dueDate}}\n\nYou can make payment via the methods we discussed. Please let me know if you have any questions.\n\nBest regards,\n{{businessName}}',
+      category: 'invoice',
+      createdAt: new Date(Date.now() - 50 * 24 * 60 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'template_7',
+      name: 'Thank You - Order Complete',
+      subject: 'Thank you! - Order {{orderNumber}} Complete',
+      body: 'Hi {{clientName}},\n\nThank you so much for your business! Your order #{{orderNumber}} is now complete.\n\nOrder Total: {{total}}\nStatus: {{status}}\n\nIt was a pleasure working with you. If you\'re happy with our service, we\'d love it if you could:\n\n1. Leave us a review\n2. Refer friends and family\n3. Follow us on social media\n\nWe look forward to working with you again in the future!\n\nBest regards,\n{{businessName}}',
+      category: 'followup',
+      createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'template_8',
+      name: 'Support Response',
+      subject: 'Re: Your question about Order {{orderNumber}}',
+      body: 'Hi {{clientName}}, Thank you for reaching out. [Your response here] Best regards, {{businessName}}',
+      category: 'support',
+      createdAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(),
+      updatedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
     }
   ];
 
