@@ -1301,30 +1301,6 @@ function App() {
               )}
             </button>
 
-            {/* Kanban */}
-            <button
-              onClick={() => {
-                setCurrentView('kanban')
-                setMobileMenuOpen(false)
-              }}
-              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
-                currentView === 'kanban'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
-                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
-              }`}
-              title={sidebarCollapsed ? "Kanban Board" : ""}
-            >
-              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
-                <svg className={`w-5 h-5 ${currentView === 'kanban' ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                </svg>
-                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Kanban Board</span>
-              </div>
-              {currentView === 'kanban' && !sidebarCollapsed && (
-                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
-              )}
-            </button>
-
             {/* Analytics */}
             <button
               onClick={() => {
@@ -1345,6 +1321,51 @@ function App() {
                 <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Analytics</span>
               </div>
               {currentView === 'analytics' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
+          </div>
+          )}
+
+          {/* Project Management Section */}
+          {!sidebarCollapsed && (
+          <button
+            onClick={() => setOrdersExpanded(!ordersExpanded)}
+            className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
+          >
+            <span>Project Management</span>
+            <svg
+              className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${ordersExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          )}
+          
+          {(ordersExpanded || sidebarCollapsed) && (
+          <div className="space-y-1 mb-6">
+            {/* Kanban */}
+            <button
+              onClick={() => {
+                setCurrentView('kanban')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'kanban'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Kanban Board" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'kanban' ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Kanban Board</span>
+              </div>
+              {currentView === 'kanban' && !sidebarCollapsed && (
                 <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
               )}
             </button>
@@ -1421,30 +1442,6 @@ function App() {
               )}
             </button>
 
-            {/* Notes */}
-            <button
-              onClick={() => {
-                setCurrentView('notes')
-                setMobileMenuOpen(false)
-              }}
-              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
-                currentView === 'notes'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
-                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
-              }`}
-              title={sidebarCollapsed ? "Notes" : ""}
-            >
-              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
-                <svg className={`w-5 h-5 ${currentView === 'notes' ? 'text-white' : 'text-yellow-400 group-hover:text-yellow-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Notes</span>
-              </div>
-              {currentView === 'notes' && !sidebarCollapsed && (
-                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
-              )}
-            </button>
-
             {/* Projects */}
             <button
               onClick={() => {
@@ -1465,30 +1462,6 @@ function App() {
                 <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Projects</span>
               </div>
               {currentView === 'projects' && !sidebarCollapsed && (
-                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
-              )}
-            </button>
-
-            {/* Email Templates */}
-            <button
-              onClick={() => {
-                setCurrentView('emailTemplates')
-                setMobileMenuOpen(false)
-              }}
-              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
-                currentView === 'emailTemplates'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
-                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
-              }`}
-              title={sidebarCollapsed ? "Email Templates" : ""}
-            >
-              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
-                <svg className={`w-5 h-5 ${currentView === 'emailTemplates' ? 'text-white' : 'text-cyan-400 group-hover:text-cyan-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Email Templates</span>
-              </div>
-              {currentView === 'emailTemplates' && !sidebarCollapsed && (
                 <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
               )}
             </button>
@@ -1601,13 +1574,13 @@ function App() {
           </div>
           )}
 
-          {/* Clients & Proposals Section */}
+          {/* Client Relations Section */}
           {!sidebarCollapsed && (
           <button
             onClick={() => setClientsExpanded(!clientsExpanded)}
             className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
           >
-            <span>Clients & Proposals</span>
+            <span>Client Relations</span>
             <svg
               className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${clientsExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
               fill="currentColor"
@@ -1778,6 +1751,75 @@ function App() {
                 <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Inventory</span>
               </div>
               {currentView === 'inventory' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
+          </div>
+          )}
+
+          {/* Communications Section */}
+          {!sidebarCollapsed && (
+          <button
+            onClick={() => setFinancialExpanded(!financialExpanded)}
+            className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
+          >
+            <span>Communications</span>
+            <svg
+              className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${financialExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          )}
+          
+          {(financialExpanded || sidebarCollapsed) && (
+          <div className="space-y-1 mb-6">
+            {/* Notes */}
+            <button
+              onClick={() => {
+                setCurrentView('notes')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'notes'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Notes" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'notes' ? 'text-white' : 'text-yellow-400 group-hover:text-yellow-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Notes</span>
+              </div>
+              {currentView === 'notes' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
+
+            {/* Email Templates */}
+            <button
+              onClick={() => {
+                setCurrentView('emailTemplates')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'emailTemplates'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Email Templates" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'emailTemplates' ? 'text-white' : 'text-cyan-400 group-hover:text-cyan-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Email Templates</span>
+              </div>
+              {currentView === 'emailTemplates' && !sidebarCollapsed && (
                 <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
               )}
             </button>
