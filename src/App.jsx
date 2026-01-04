@@ -1634,7 +1634,10 @@ function App() {
             </div>
             
             {/* Mobile Menu Button */}
-            <button className="md:hidden text-slate-300 hover:text-white">
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden text-slate-300 hover:text-white z-50 relative"
+            >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
@@ -1642,6 +1645,55 @@ function App() {
           </div>
         </div>
       </nav>
+
+      {/* Mobile Menu Dropdown */}
+      {mobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/60 z-40 md:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          
+          {/* Mobile Menu Panel */}
+          <div className="fixed top-20 right-0 w-64 bg-slate-900/98 backdrop-blur-lg border-l border-b border-slate-800 rounded-bl-2xl shadow-2xl z-50 md:hidden">
+            <div className="p-4 space-y-2">
+              <a 
+                href="#features" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-lg transition-all"
+              >
+                Features
+              </a>
+              <a 
+                href="#showcase" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-lg transition-all"
+              >
+                Showcase
+              </a>
+              <a 
+                href="#about" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-lg transition-all"
+              >
+                About
+              </a>
+              <div className="pt-2 border-t border-slate-800">
+                <button 
+                  onClick={() => {
+                    setAuthView('signin')
+                    setMobileMenuOpen(false)
+                  }}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg transition-all font-semibold text-sm shadow-lg"
+                >
+                  Sign In
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Hero Section - Modern & Clean */}
       <section className="relative pt-32 pb-20 px-6 overflow-hidden">
