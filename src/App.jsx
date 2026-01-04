@@ -2765,6 +2765,21 @@ function App() {
             />
           )}
 
+          {/* Projects View (portfolio showcase) */}
+          {currentView === 'projects' && (
+            <KanbanView
+              orders={orders}
+              setOrders={setOrders}
+              setSelectedOrderId={setSelectedOrderId}
+              setModalType={setModalType}
+              setFormData={setFormData}
+              setShowModal={setShowModal}
+              openOrderDetailModal={openOrderDetailModal}
+              formatMoney={formatMoney}
+              getDueDateStatus={getDueDateStatus}
+            />
+          )}
+
           {/* Tasks View */}
           {currentView === 'tasks' && (
             <TasksView
