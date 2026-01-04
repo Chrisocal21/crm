@@ -1258,13 +1258,13 @@ function App() {
 
         {/* Navigation */}
         <nav className="flex-1 p-3 overflow-y-auto">
-          {/* Workflow Section */}
+          {/* Overview Section */}
           {!sidebarCollapsed && (
           <button
             onClick={() => setWorkflowExpanded(!workflowExpanded)}
             className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
           >
-            <span>Workflow</span>
+            <span>Overview</span>
             <svg
               className={`w-3.5 h-3.5 transition-all group-hover:text-blue-400 ${workflowExpanded ? 'rotate-0 text-blue-500' : '-rotate-90 text-slate-600'}`}
               fill="currentColor"
