@@ -2809,10 +2809,14 @@ function App() {
           {currentView === 'projects' && (
             <KanbanView
               orders={orders}
-              setOrders={setOrders}
+              clients={clients}
+              kanbanFilters={kanbanFilters}
+              setKanbanFilters={setKanbanFilters}
+              openNewOrderModal={openNewOrderModal}
               openOrderDetailModal={openOrderDetailModal}
-              formatMoney={formatMoney}
-              getDueDateStatus={getDueDateStatus}
+              dataManager={dataManager}
+              loadData={loadData}
+              activeConfig={activeConfig}
             />
           )}
 
