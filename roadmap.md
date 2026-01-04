@@ -454,6 +454,16 @@ A comprehensive development plan for building a complete business operating syst
 - [x] Task/reminder system in notifications (already exists)
 
 **Remaining Tasks:**
+- [ ] Timeline/Gantt visualizer for order due dates
+  - [ ] Visual timeline showing order timeframes
+  - [ ] Due date representation on calendar scale
+  - [ ] Color coding by status (overdue, upcoming, on track)
+  - [ ] Overlapping order detection
+  - [ ] Drag to adjust due dates
+  - [ ] Filter by store/status
+  - [ ] Today marker line
+  - [ ] Week/month/quarter views
+  - [ ] Quick jump to order from timeline
 - [ ] Dedicated Tasks view (separate from notifications)
 - [ ] Task categories and projects
 - [ ] Task priority levels
