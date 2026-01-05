@@ -20,6 +20,10 @@ const SettingsViewV2 = ({
   clearAllData
 }) => {
   const [activeTab, setActiveTab] = useState('profile')
+  const [profileSubTab, setProfileSubTab] = useState('personal')
+  const [businessSubTab, setBusinessSubTab] = useState('company')
+  const [preferencesSubTab, setPreferencesSubTab] = useState('appearance')
+  const [catalogSubTab, setCatalogSubTab] = useState('kanban')
 
   const tabs = [
     { id: 'profile', label: 'My Profile', icon: '👤' },
@@ -63,6 +67,43 @@ const SettingsViewV2 = ({
         {/* Profile Tab */}
         {activeTab === 'profile' && (
           <>
+            {/* Sub-tab Navigation for Profile */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">
+              <div className="flex space-x-2 overflow-x-auto">
+                <button
+                  onClick={() => setProfileSubTab('personal')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    profileSubTab === 'personal'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  👤 Personal Info
+                </button>
+                <button
+                  onClick={() => setProfileSubTab('notifications')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    profileSubTab === 'notifications'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  🔔 Notifications
+                </button>
+                <button
+                  onClick={() => setProfileSubTab('security')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    profileSubTab === 'security'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  🔒 Security
+                </button>
+              </div>
+            </div>
+
+            {profileSubTab === 'personal' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Personal Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -105,7 +146,9 @@ const SettingsViewV2 = ({
                 </div>
               </div>
             </div>
+            )}
 
+            {profileSubTab === 'notifications' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Notifications</h3>
               <div className="space-y-2">
@@ -132,12 +175,95 @@ const SettingsViewV2 = ({
                 </label>
               </div>
             </div>
+            )}
+
+            {profileSubTab === 'security' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Security Settings</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">Current Password</label>
+                  <input
+                    type="password"
+                    placeholder="Enter current password"
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Enter new password"
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">Confirm New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Confirm new password"
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors text-sm">
+                  Update Password
+                </button>
+              </div>
+            </div>
+            )}
           </>
         )}
 
         {/* Business Tab */}
         {activeTab === 'business' && hasPermission('manageSettings') && (
           <>
+            {/* Sub-tab Navigation for Business */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">
+              <div className="flex space-x-2 overflow-x-auto">
+                <button
+                  onClick={() => setBusinessSubTab('company')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    businessSubTab === 'company'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  🏢 Company Info
+                </button>
+                <button
+                  onClick={() => setBusinessSubTab('financial')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    businessSubTab === 'financial'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  💰 Financial
+                </button>
+                <button
+                  onClick={() => setBusinessSubTab('defaults')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    businessSubTab === 'defaults'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  ⚙️ Defaults
+                </button>
+                <button
+                  onClick={() => setBusinessSubTab('integrations')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    businessSubTab === 'integrations'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  🔗 Integrations
+                </button>
+              </div>
+            </div>
+
+            {businessSubTab === 'company' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Business Profile</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -183,7 +309,9 @@ const SettingsViewV2 = ({
                 </div>
               </div>
             </div>
+            )}
 
+            {businessSubTab === 'financial' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Financial Settings</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -226,7 +354,9 @@ const SettingsViewV2 = ({
                 </div>
               </div>
             </div>
+            )}
 
+            {businessSubTab === 'defaults' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Order Defaults</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -271,7 +401,9 @@ const SettingsViewV2 = ({
                 </div>
               </div>
             </div>
+            )}
 
+            {businessSubTab === 'integrations' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Store Integrations</h3>
               <p className="text-slate-400 text-xs mb-3">Connect your sales channels</p>
@@ -303,12 +435,50 @@ const SettingsViewV2 = ({
                 ))}
               </div>
             </div>
+            )}
           </>
         )}
 
         {/* Preferences Tab */}
         {activeTab === 'preferences' && (
           <>
+            {/* Sub-tab Navigation for Preferences */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">
+              <div className="flex space-x-2 overflow-x-auto">
+                <button
+                  onClick={() => setPreferencesSubTab('appearance')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    preferencesSubTab === 'appearance'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  🎨 Appearance
+                </button>
+                <button
+                  onClick={() => setPreferencesSubTab('regional')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    preferencesSubTab === 'regional'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  🌍 Regional
+                </button>
+                <button
+                  onClick={() => setPreferencesSubTab('email')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    preferencesSubTab === 'email'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  📧 Email
+                </button>
+              </div>
+            </div>
+
+            {preferencesSubTab === 'appearance' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Appearance</h3>
               <div className="space-y-4">
@@ -332,7 +502,9 @@ const SettingsViewV2 = ({
                 </label>
               </div>
             </div>
+            )}
 
+            {preferencesSubTab === 'regional' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Regional Settings</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -359,7 +531,9 @@ const SettingsViewV2 = ({
                 </div>
               </div>
             </div>
+            )}
 
+            {preferencesSubTab === 'email' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Email Preferences</h3>
               <div className="space-y-4">
@@ -387,6 +561,7 @@ const SettingsViewV2 = ({
                 </label>
               </div>
             </div>
+            )}
           </>
         )}
 
@@ -480,7 +655,157 @@ const SettingsViewV2 = ({
         {/* Catalog Tab */}
         {activeTab === 'catalog' && hasPermission('manageSettings') && (
           <>
+            {/* Sub-tab Navigation for Catalog */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">
+              <div className="flex space-x-2 overflow-x-auto">
+                <button
+                  onClick={() => setCatalogSubTab('kanban')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    catalogSubTab === 'kanban'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  📋 Kanban Boards
+                </button>
+                <button
+                  onClick={() => setCatalogSubTab('products')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    catalogSubTab === 'products'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  📦 Products & Services
+                </button>
+                <button
+                  onClick={() => setCatalogSubTab('materials')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    catalogSubTab === 'materials'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  🧱 Materials
+                </button>
+                <button
+                  onClick={() => setCatalogSubTab('addons')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    catalogSubTab === 'addons'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  ➕ Add-ons
+                </button>
+              </div>
+            </div>
+
+            {/* Kanban Board Statuses */}
+            {catalogSubTab === 'kanban' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Kanban Board Columns</h3>
+                  <p className="text-xs text-slate-400 mt-1">Manage workflow stages for your kanban board</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const newStatus = {
+                      id: `status_${Date.now()}`,
+                      label: 'New Stage',
+                      color: '#6366f1',
+                      icon: "<svg class='w-5 h-5' fill='none' stroke='#a5b4fc' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'/></svg>",
+                      description: 'New workflow stage'
+                    }
+                    const updated = [...activeConfig.statuses, newStatus]
+                    const newConfig = {...customConfig, statuses: updated}
+                    setCustomConfig(newConfig)
+                    dataManager.customConfig.save(newConfig)
+                  }}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span>Add Column</span>
+                </button>
+              </div>
+              <div className="space-y-2">
+                {activeConfig.statuses.map((status, index) => (
+                  <div key={status.id} className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <input
+                        type="text"
+                        value={status.label}
+                        onChange={(e) => {
+                          const updated = [...activeConfig.statuses]
+                          updated[index] = {...updated[index], label: e.target.value}
+                          const newConfig = {...customConfig, statuses: updated}
+                          setCustomConfig(newConfig)
+                          dataManager.customConfig.save(newConfig)
+                        }}
+                        className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        placeholder="Column Name"
+                      />
+                      <input
+                        type="color"
+                        value={status.color}
+                        onChange={(e) => {
+                          const updated = [...activeConfig.statuses]
+                          updated[index] = {...updated[index], color: e.target.value}
+                          const newConfig = {...customConfig, statuses: updated}
+                          setCustomConfig(newConfig)
+                          dataManager.customConfig.save(newConfig)
+                        }}
+                        className="px-2 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 h-10"
+                      />
+                      <input
+                        type="text"
+                        value={status.description}
+                        onChange={(e) => {
+                          const updated = [...activeConfig.statuses]
+                          updated[index] = {...updated[index], description: e.target.value}
+                          const newConfig = {...customConfig, statuses: updated}
+                          setCustomConfig(newConfig)
+                          dataManager.customConfig.save(newConfig)
+                        }}
+                        className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        placeholder="Description"
+                      />
+                      <div className="flex items-center justify-between">
+                        <div 
+                          className="px-3 py-2 rounded text-sm font-medium"
+                          style={{ backgroundColor: status.color + '20', color: status.color }}
+                        >
+                          {status.label}
+                        </div>
+                        <button
+                          onClick={() => {
+                            showConfirm(`Delete "${status.label}" column? This cannot be undone.`, () => {
+                              const updated = activeConfig.statuses.filter((_, i) => i !== index)
+                              const newConfig = {...customConfig, statuses: updated}
+                              setCustomConfig(newConfig)
+                              dataManager.customConfig.save(newConfig)
+                              showSuccess('Kanban column deleted')
+                            })
+                          }}
+                          className="p-2 text-red-400 hover:bg-red-900/30 hover:text-red-300 rounded-lg transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            )}
+
             {/* Products & Services */}
+            {catalogSubTab === 'products' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <div className="flex justify-between items-center mb-4">
                 <div>
@@ -563,8 +888,10 @@ const SettingsViewV2 = ({
                 ))}
               </div>
             </div>
+            )}
 
             {/* Materials */}
+            {catalogSubTab === 'materials' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <div className="flex justify-between items-center mb-4">
                 <div>
@@ -646,8 +973,10 @@ const SettingsViewV2 = ({
                 ))}
               </div>
             </div>
+            )}
 
             {/* Add-ons */}
+            {catalogSubTab === 'addons' && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <div className="flex justify-between items-center mb-4">
                 <div>
@@ -729,6 +1058,7 @@ const SettingsViewV2 = ({
                 ))}
               </div>
             </div>
+            )}
           </>
         )}
 

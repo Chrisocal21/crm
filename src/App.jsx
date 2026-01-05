@@ -68,6 +68,8 @@ function App() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [storeFilter, setStoreFilter] = useState('all')
   const [ordersExpanded, setOrdersExpanded] = useState(true)
+  const [activeOrderTab, setActiveOrderTab] = useState('details') // 'details', 'items', 'pricing', 'payments', 'notes'
+  const [shippingTab, setShippingTab] = useState('dates') // 'dates', 'address', 'details'
   const [workflowExpanded, setWorkflowExpanded] = useState(true)
   const [projectManagementExpanded, setProjectManagementExpanded] = useState(true)
   const [clientsExpanded, setClientsExpanded] = useState(true)
@@ -356,6 +358,7 @@ function App() {
       status: order.status,
       notes: order.notes
     })
+    setActiveOrderTab('details') // Reset to details tab
     setShowModal(true)
   }
 
@@ -2272,7 +2275,7 @@ function App() {
                   {showUserMenu && (
                     <div className="absolute top-full right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50">
                       {/* User Info Header */}
-                      <div className="p-4 border-b border-slate-800 bg-gradient-to-br from-blue-600/10 to-purple-600/10">
+                      <div className="p-4 border-b border-slate-800">
                         <div className="flex items-center space-x-3">
                           <div className="relative group">
                             {profileImage ? (
@@ -2326,40 +2329,134 @@ function App() {
                         </div>
                       </div>
                       
-                      {/* Online Users List */}
-                      <div className="p-3 border-b border-slate-800">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center space-x-2">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                          <span>Team ({users.length})</span>
-                        </p>
-                        <div className="space-y-2 max-h-40 overflow-y-auto">
-                          {users.map(user => (
-                            <div key={user.id} className="flex items-center space-x-2 p-1.5 rounded hover:bg-slate-800/50 transition-colors">
-                              <div className="relative">
-                                <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                                  {user.name.charAt(0).toUpperCase()}
+                      {/* Chat/Messages Section */}
+                      <div className="p-3 border-b border-slate-800 bg-gradient-to-br from-blue-600/5 to-purple-600/5">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-white text-sm font-semibold">Messages</p>
+                              <p className="text-xs text-slate-400">Team Chat</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
+                              3 new
+                            </span>
+                            <button
+                              onClick={() => showSuccess('Chat support coming soon!')}
+                              className="w-6 h-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg flex items-center justify-center transition-all hover:scale-110 shadow-lg"
+                              title="New Message"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Quick Messages */}
+                        <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                          {/* Message 1 */}
+                          <button
+                            onClick={() => showSuccess('Chat support coming soon!')}
+                            className="w-full p-2 hover:bg-slate-800/50 rounded-lg transition-colors text-left group"
+                          >
+                            <div className="flex items-start space-x-2">
+                              <div className="relative flex-shrink-0">
+                                <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                  S
                                 </div>
-                                {/* Status indicators - green (online), yellow (away), hollow (offline) */}
-                                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-slate-900 rounded-full ${
-                                  user.id === currentUser.id ? 'bg-green-500' : 
-                                  Math.random() > 0.5 ? 'bg-green-500' : 
-                                  Math.random() > 0.3 ? 'bg-yellow-500' : 
-                                  'bg-slate-600'
-                                }`}></div>
+                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-white truncate">{user.name}</p>
-                                <p className="text-xs text-slate-500 truncate">{user.role}</p>
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <p className="text-sm text-white font-medium truncate">Support Team</p>
+                                  <span className="text-xs text-slate-500 flex-shrink-0">2m ago</span>
+                                </div>
+                                <p className="text-xs text-slate-400 line-clamp-2">Welcome! How can we help you today?</p>
+                              </div>
+                              <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5"></div>
+                            </div>
+                          </button>
+                          
+                          {/* Message 2 */}
+                          <button
+                            onClick={() => showSuccess('Chat support coming soon!')}
+                            className="w-full p-2 hover:bg-slate-800/50 rounded-lg transition-colors text-left group"
+                          >
+                            <div className="flex items-start space-x-2">
+                              <div className="relative flex-shrink-0">
+                                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                  A
+                                </div>
+                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <p className="text-sm text-white font-medium truncate">Alex Morrison</p>
+                                  <span className="text-xs text-slate-500 flex-shrink-0">15m ago</span>
+                                </div>
+                                <p className="text-xs text-slate-400 line-clamp-2">Can you review the latest proposal?</p>
+                              </div>
+                              <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5"></div>
+                            </div>
+                          </button>
+                          
+                          {/* Message 3 */}
+                          <button
+                            onClick={() => showSuccess('Chat support coming soon!')}
+                            className="w-full p-2 hover:bg-slate-800/50 rounded-lg transition-colors text-left group"
+                          >
+                            <div className="flex items-start space-x-2">
+                              <div className="relative flex-shrink-0">
+                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                  J
+                                </div>
+                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <p className="text-sm text-white font-medium truncate">Jamie Chen</p>
+                                  <span className="text-xs text-slate-500 flex-shrink-0">1h ago</span>
+                                </div>
+                                <p className="text-xs text-slate-400 line-clamp-2">Meeting rescheduled to 3 PM</p>
+                              </div>
+                              <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5"></div>
+                            </div>
+                          </button>
+                          
+                          {/* Older Messages */}
+                          <button
+                            onClick={() => showSuccess('Chat support coming soon!')}
+                            className="w-full p-2 hover:bg-slate-800/50 rounded-lg transition-colors text-left group"
+                          >
+                            <div className="flex items-start space-x-2">
+                              <div className="relative flex-shrink-0">
+                                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                  M
+                                </div>
+                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-yellow-500 border-2 border-slate-900 rounded-full"></div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <p className="text-sm text-white font-medium truncate">Mike Taylor</p>
+                                  <span className="text-xs text-slate-500 flex-shrink-0">3h ago</span>
+                                </div>
+                                <p className="text-xs text-slate-400 line-clamp-2">Thanks for the update!</p>
                               </div>
                             </div>
-                          ))}
+                          </button>
                         </div>
                       </div>
                       
-                      {/* Profile Actions */}
-                      <div className="p-2">
+                      {/* Bottom Actions */}
+                      <div className="p-2 border-t border-slate-800 space-y-1">
+                        {/* Profile Actions */}
                         <button
                           onClick={() => {
                             setShowUserModal(true)
@@ -2374,57 +2471,27 @@ function App() {
                           <span className="text-sm">Edit Profile</span>
                         </button>
                         
-                        <button
-                          onClick={() => {
-                            // TODO: Add account settings functionality
-                            setShowUserMenu(false)
-                          }}
-                          className="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                          </svg>
-                          <span className="text-sm">Change Password</span>
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            // TODO: Add preferences functionality
-                            setShowUserMenu(false)
-                          }}
-                          className="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                          </svg>
-                          <span className="text-sm">Preferences</span>
-                        </button>
-                      </div>
-
-                      {/* Upgrade to Pro */}
-                      <div className="p-2 border-t border-slate-800">
+                        {/* Upgrade to Pro */}
                         <button
                           onClick={() => {
                             setCurrentView('upgrade')
                             setShowUserMenu(false)
                           }}
-                          className="w-full text-left px-3 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center space-x-2 shadow-lg shadow-purple-500/20"
+                          className="w-full text-left px-3 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center space-x-2 shadow-lg shadow-purple-500/20 mt-2"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                           </svg>
                           <span className="text-sm font-semibold">Upgrade to Pro</span>
                         </button>
-                      </div>
 
-                      {/* Logout */}
-                      <div className="p-2 border-t border-slate-800">
+                        {/* Logout */}
                         <button
                           onClick={() => {
                             handleLogout()
                             setShowUserMenu(false)
                           }}
-                          className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors flex items-center space-x-2"
+                          className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors flex items-center space-x-2 mt-2"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -2765,9 +2832,11 @@ function App() {
           {currentView === 'calendar' && (
             <CalendarView
               orders={orders}
+              clients={clients}
               setModalType={setModalType}
               setFormData={setFormData}
               setShowModal={setShowModal}
+              openOrderDetailModal={openOrderDetailModal}
             />
           )}
 
@@ -2837,7 +2906,7 @@ function App() {
           <div className={`bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl transition-all duration-300 ${
             isModalFullscreen 
               ? 'w-full h-full max-w-none max-h-none m-0 rounded-none' 
-              : 'w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh]'
+              : 'w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh]'
           } overflow-hidden flex flex-col`}>
             
             {/* New Client Modal */}
@@ -3372,6 +3441,229 @@ function App() {
                     </div>
                   )}
                   
+                  {/* Order Tracking & Shipping Information */}
+                  <div className="border-t border-slate-700 pt-4">
+                    <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      <span>📦 Order Tracking & Shipping</span>
+                    </h3>
+                    
+                    {/* Shipping Tabs */}
+                    <div className="flex space-x-1 mb-4 bg-slate-800/50 p-1 rounded-lg">
+                      <button
+                        onClick={() => setShippingTab('dates')}
+                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                          shippingTab === 'dates'
+                            ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                        }`}
+                      >
+                        📅 Order Dates
+                      </button>
+                      <button
+                        onClick={() => setShippingTab('address')}
+                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                          shippingTab === 'address'
+                            ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                        }`}
+                      >
+                        📍 Shipping Address
+                      </button>
+                      <button
+                        onClick={() => setShippingTab('details')}
+                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                          shippingTab === 'details'
+                            ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                        }`}
+                      >
+                        🚚 Shipping Details
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {/* Order Dates Tab */}
+                      {shippingTab === 'dates' && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Order Submitted</label>
+                          <input
+                            type="date"
+                            value={formData.orderSubmittedDate || ''}
+                            onChange={(e) => setFormData({...formData, orderSubmittedDate: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Order Confirmed</label>
+                          <input
+                            type="date"
+                            value={formData.orderConfirmedDate || ''}
+                            onChange={(e) => setFormData({...formData, orderConfirmedDate: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Expected Ship Date</label>
+                          <input
+                            type="date"
+                            value={formData.expectedShipDate || ''}
+                            onChange={(e) => setFormData({...formData, expectedShipDate: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Actual Ship Date</label>
+                          <input
+                            type="date"
+                            value={formData.actualShipDate || ''}
+                            onChange={(e) => setFormData({...formData, actualShipDate: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Expected Delivery</label>
+                          <input
+                            type="date"
+                            value={formData.expectedDeliveryDate || ''}
+                            onChange={(e) => setFormData({...formData, expectedDeliveryDate: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Delivered / In Hand</label>
+                          <input
+                            type="date"
+                            value={formData.actualDeliveryDate || ''}
+                            onChange={(e) => setFormData({...formData, actualDeliveryDate: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      )}
+
+                      {/* Shipping Address Tab */}
+                      {shippingTab === 'address' && (
+                      <div>
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={formData.shippingName || ''}
+                            onChange={(e) => setFormData({...formData, shippingName: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                            placeholder="Recipient Name"
+                          />
+                          <input
+                            type="text"
+                            value={formData.shippingAddress1 || ''}
+                            onChange={(e) => setFormData({...formData, shippingAddress1: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                            placeholder="Address Line 1"
+                          />
+                          <input
+                            type="text"
+                            value={formData.shippingAddress2 || ''}
+                            onChange={(e) => setFormData({...formData, shippingAddress2: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                            placeholder="Address Line 2 (optional)"
+                          />
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="text"
+                              value={formData.shippingCity || ''}
+                              onChange={(e) => setFormData({...formData, shippingCity: e.target.value})}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                              placeholder="City"
+                            />
+                            <input
+                              type="text"
+                              value={formData.shippingState || ''}
+                              onChange={(e) => setFormData({...formData, shippingState: e.target.value})}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                              placeholder="State"
+                            />
+                            <input
+                              type="text"
+                              value={formData.shippingZip || ''}
+                              onChange={(e) => setFormData({...formData, shippingZip: e.target.value})}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                              placeholder="ZIP"
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            value={formData.shippingCountry || ''}
+                            onChange={(e) => setFormData({...formData, shippingCountry: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                            placeholder="Country"
+                          />
+                        </div>
+                      </div>
+                      )}
+
+                      {/* Shipping Details Tab */}
+                      {shippingTab === 'details' && (
+                      <div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Shipping Carrier</label>
+                            <select
+                              value={formData.shippingCarrier || ''}
+                              onChange={(e) => setFormData({...formData, shippingCarrier: e.target.value})}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                            >
+                              <option value="">Select Carrier</option>
+                              <option value="usps">USPS</option>
+                              <option value="ups">UPS</option>
+                              <option value="fedex">FedEx</option>
+                              <option value="dhl">DHL</option>
+                              <option value="other">Other</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Service Type</label>
+                            <select
+                              value={formData.shippingService || ''}
+                              onChange={(e) => setFormData({...formData, shippingService: e.target.value})}
+                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                            >
+                              <option value="">Select Service</option>
+                              <option value="standard">Standard</option>
+                              <option value="expedited">Expedited</option>
+                              <option value="overnight">Overnight</option>
+                              <option value="priority">Priority</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="mt-2">
+                          <label className="block text-xs text-slate-400 mb-1">Tracking Number</label>
+                          <input
+                            type="text"
+                            value={formData.trackingNumber || ''}
+                            onChange={(e) => setFormData({...formData, trackingNumber: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                            placeholder="Enter tracking number"
+                          />
+                        </div>
+                        <div className="mt-2">
+                          <label className="block text-xs text-slate-400 mb-1">Shipping Cost</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formData.shippingCost || ''}
+                            onChange={(e) => setFormData({...formData, shippingCost: e.target.value})}
+                            className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
                     <textarea
@@ -3614,7 +3906,89 @@ function App() {
                   </div>
                 </div>
                 
+                {/* Tabs Navigation */}
+                <div className="px-6 border-b border-slate-800/50 bg-slate-900/50 flex space-x-1 overflow-x-auto flex-shrink-0">
+                  <button
+                    onClick={() => setActiveOrderTab('details')}
+                    className={`px-4 py-3 font-medium text-sm transition-all relative whitespace-nowrap ${
+                      activeOrderTab === 'details'
+                        ? 'text-blue-400 border-b-2 border-blue-400'
+                        : 'text-slate-400 hover:text-slate-300 border-b-2 border-transparent hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Details</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveOrderTab('items')}
+                    className={`px-4 py-3 font-medium text-sm transition-all relative whitespace-nowrap ${
+                      activeOrderTab === 'items'
+                        ? 'text-blue-400 border-b-2 border-blue-400'
+                        : 'text-slate-400 hover:text-slate-300 border-b-2 border-transparent hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                      <span>Items</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveOrderTab('pricing')}
+                    className={`px-4 py-3 font-medium text-sm transition-all relative whitespace-nowrap ${
+                      activeOrderTab === 'pricing'
+                        ? 'text-blue-400 border-b-2 border-blue-400'
+                        : 'text-slate-400 hover:text-slate-300 border-b-2 border-transparent hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Pricing</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveOrderTab('payments')}
+                    className={`px-4 py-3 font-medium text-sm transition-all relative whitespace-nowrap ${
+                      activeOrderTab === 'payments'
+                        ? 'text-blue-400 border-b-2 border-blue-400'
+                        : 'text-slate-400 hover:text-slate-300 border-b-2 border-transparent hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      <span>Payments</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveOrderTab('notes')}
+                    className={`px-4 py-3 font-medium text-sm transition-all relative whitespace-nowrap ${
+                      activeOrderTab === 'notes'
+                        ? 'text-blue-400 border-b-2 border-blue-400'
+                        : 'text-slate-400 hover:text-slate-300 border-b-2 border-transparent hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <span>Notes</span>
+                    </div>
+                  </button>
+                </div>
+                
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                  {/* Details Tab */}
+                  {activeOrderTab === 'details' && (
+                    <div className="space-y-6">
                   {/* Main Info Grid */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Client Info Card */}
@@ -3661,7 +4035,12 @@ function App() {
                       </select>
                     </div>
                   </div>
+                    </div>
+                  )}
 
+                  {/* Items Tab */}
+                  {activeOrderTab === 'items' && (
+                    <div className="space-y-6">
                   {/* Order Items Section */}
                   <div className="bg-gradient-to-br from-slate-800/50 to-slate-800/30 rounded-xl p-6 border border-slate-700/50">
                     <div className="flex justify-between items-center mb-5">
@@ -3860,7 +4239,12 @@ function App() {
                       ))}
                     </div>
                   </div>
+                    </div>
+                  )}
 
+                  {/* Pricing Tab */}
+                  {activeOrderTab === 'pricing' && (
+                    <div className="space-y-6">
                   {/* Pricing Section */}
                   <div className="bg-gradient-to-br from-slate-800/50 to-slate-800/30 rounded-xl p-6 border border-slate-700/50">
                     <div className="flex items-center space-x-3 mb-5">
@@ -4052,7 +4436,12 @@ function App() {
                       </div>
                     )}
                   </div>
+                    </div>
+                  )}
 
+                  {/* Payments Tab */}
+                  {activeOrderTab === 'payments' && (
+                    <div className="space-y-6">
                   {/* Payment History */}
                   <div>
                     <div className="flex justify-between items-center mb-2">
@@ -4332,8 +4721,13 @@ function App() {
                       </select>
                     </div>
                   </div>
+                    </div>
+                  )}
 
-                  {/* Notes */}
+                  {/* Notes Tab */}
+                  {activeOrderTab === 'notes' && (
+                    <div className="space-y-6">
+                  {/* Order Notes */}
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
                     <textarea
@@ -5065,6 +5459,8 @@ function App() {
                       )}
                     </div>
                   </div>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="p-6 border-t border-slate-800/50 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 flex-shrink-0 bg-gradient-to-r from-slate-900/50 to-slate-800/30">
@@ -8900,17 +9296,6 @@ function App() {
         </div>
       )}
 
-      {/* Floating Chat/Support Button - Bottom Right */}
-      <button
-        onClick={() => showSuccess('Chat support coming soon!')}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-full shadow-2xl flex items-center justify-center z-40 transition-all hover:scale-110 group"
-        title="Chat Support"
-      >
-        <svg className="w-6 h-6 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-        <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-slate-900 animate-pulse"></div>
-      </button>
     </div>
   )
 }

@@ -79,7 +79,7 @@ export default function KanbanView({
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto pb-4">
+      <div className="flex gap-4 overflow-x-auto pb-4">
         {activeConfig.statuses.map(status => {
           // Apply filters
           let statusOrders = orders.filter(o => o.status === status.id)
@@ -168,7 +168,7 @@ export default function KanbanView({
                     return (
                       <div
                         key={order.id}
-                        draggable
+                        draggable="true"
                         onDragStart={(e) => {
                           e.dataTransfer.setData('orderId', order.id)
                           e.currentTarget.classList.add('opacity-50')
@@ -176,7 +176,11 @@ export default function KanbanView({
                         onDragEnd={(e) => {
                           e.currentTarget.classList.remove('opacity-50')
                         }}
-                        onClick={() => openOrderDetailModal(order)}
+                        onClick={(e) => {
+                          // Only open modal if not dragging
+                          if (e.defaultPrevented) return
+                          openOrderDetailModal(order)
+                        }}
                         className="bg-slate-800 rounded-lg p-3 hover:bg-slate-700 transition-colors cursor-move border border-slate-700 hover:border-slate-600"
                       >
                         {/* Client Name */}
@@ -233,6 +237,42 @@ export default function KanbanView({
                             </span>
                           )}
                         </div>
+
+                        {/* Shipping Dates */}
+                        {order.shipping && (
+                          <div className="mb-2 space-y-0.5 text-xs">
+                            {order.shipping.orderSubmittedDate && (
+                              <div className="flex items-center space-x-1 text-slate-400">
+                                <span className="text-slate-500">📅</span>
+                                <span>Ordered: {new Date(order.shipping.orderSubmittedDate).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                            {order.shipping.expectedShipDate && (
+                              <div className="flex items-center space-x-1 text-slate-400">
+                                <span className="text-slate-500">📦</span>
+                                <span>Ships: {new Date(order.shipping.expectedShipDate).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                            {order.shipping.actualShipDate && (
+                              <div className="flex items-center space-x-1 text-blue-400">
+                                <span>🚚</span>
+                                <span>Shipped: {new Date(order.shipping.actualShipDate).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                            {order.shipping.expectedDeliveryDate && !order.shipping.actualDeliveryDate && (
+                              <div className="flex items-center space-x-1 text-slate-400">
+                                <span className="text-slate-500">🏠</span>
+                                <span>Expected: {new Date(order.shipping.expectedDeliveryDate).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                            {order.shipping.actualDeliveryDate && (
+                              <div className="flex items-center space-x-1 text-green-400">
+                                <span>✅</span>
+                                <span>Delivered: {new Date(order.shipping.actualDeliveryDate).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Pricing */}
                         <div className="flex items-center justify-between pt-2 border-t border-slate-700">

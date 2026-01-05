@@ -787,6 +787,25 @@ export const useLocalStorage = () => {
           notes: '50% deposit received via credit card'
         }
       ],
+      shipping: {
+        orderSubmittedDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        orderConfirmedDate: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        expectedShipDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualShipDate: '',
+        expectedDeliveryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualDeliveryDate: '',
+        shippingName: 'Joe Henderson',
+        shippingAddress1: '742 Evergreen Terrace',
+        shippingAddress2: '',
+        shippingCity: 'Springfield',
+        shippingState: 'OR',
+        shippingZip: '97477',
+        shippingCountry: 'United States',
+        shippingCarrier: 'ups',
+        shippingService: 'standard',
+        trackingNumber: '',
+        shippingCost: '85.00'
+      },
       notes: 'Joe requested a natural finish with minimal staining. Will deliver on Saturday morning. Confirmed delivery address.',
       createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
@@ -831,6 +850,25 @@ export const useLocalStorage = () => {
         completedDate: null
       },
       payments: [],
+      shipping: {
+        orderSubmittedDate: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        orderConfirmedDate: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        expectedShipDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualShipDate: '',
+        expectedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualDeliveryDate: '',
+        shippingName: 'Sarah Chen',
+        shippingAddress1: '456 Mountain View Drive',
+        shippingAddress2: 'Apt 3B',
+        shippingCity: 'Boulder',
+        shippingState: 'CO',
+        shippingZip: '80301',
+        shippingCountry: 'United States',
+        shippingCarrier: 'usps',
+        shippingService: 'priority',
+        trackingNumber: '',
+        shippingCost: '12.50'
+      },
       notes: 'Amazon Prime order - needs to ship within 2 business days.',
       createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
@@ -875,6 +913,25 @@ export const useLocalStorage = () => {
         completedDate: null
       },
       payments: [],
+      shipping: {
+        orderSubmittedDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        orderConfirmedDate: '',
+        expectedShipDate: '',
+        actualShipDate: '',
+        expectedDeliveryDate: '',
+        actualDeliveryDate: '',
+        shippingName: 'Mike Roberts',
+        shippingAddress1: '789 Corporate Center',
+        shippingAddress2: 'Suite 500',
+        shippingCity: 'Seattle',
+        shippingState: 'WA',
+        shippingZip: '98101',
+        shippingCountry: 'United States',
+        shippingCarrier: 'fedex',
+        shippingService: 'expedited',
+        trackingNumber: '',
+        shippingCost: '0.00'
+      },
       notes: 'Awaiting customer approval on quote. Shopify store inquiry.',
       createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
@@ -927,6 +984,25 @@ export const useLocalStorage = () => {
           notes: 'Full payment through Etsy (includes 6.5% + $0.20 marketplace fee)'
         }
       ],
+      shipping: {
+        orderSubmittedDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        orderConfirmedDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        expectedShipDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualShipDate: '',
+        expectedDeliveryDate: '',
+        actualDeliveryDate: '',
+        shippingName: 'Emily Davis',
+        shippingAddress1: '321 Maple Street',
+        shippingAddress2: '',
+        shippingCity: 'Portland',
+        shippingState: 'ME',
+        shippingZip: '04101',
+        shippingCountry: 'United States',
+        shippingCarrier: '',
+        shippingService: 'standard',
+        trackingNumber: '',
+        shippingCost: '0.00'
+      },
       notes: 'Ready for pickup. Customer messaged about local pickup option.',
       createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
@@ -979,6 +1055,25 @@ export const useLocalStorage = () => {
           notes: 'PayPal payment through eBay (includes 12.9% marketplace fee)'
         }
       ],
+      shipping: {
+        orderSubmittedDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        orderConfirmedDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        expectedShipDate: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualShipDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        expectedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualDeliveryDate: '',
+        shippingName: 'Tom Wilson',
+        shippingAddress1: '555 Lake Shore Drive',
+        shippingAddress2: '',
+        shippingCity: 'Chicago',
+        shippingState: 'IL',
+        shippingZip: '60611',
+        shippingCountry: 'United States',
+        shippingCarrier: 'fedex',
+        shippingService: 'standard',
+        trackingNumber: '794612345678',
+        shippingCost: '18.75'
+      },
       notes: 'Shipped via FedEx, tracking number provided to customer.',
       createdAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
@@ -1031,6 +1126,25 @@ export const useLocalStorage = () => {
           notes: 'Cash payment on local pickup (includes 5% Facebook marketplace fee passed to customer)'
         }
       ],
+      shipping: {
+        orderSubmittedDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        orderConfirmedDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        expectedShipDate: '',
+        actualShipDate: '',
+        expectedDeliveryDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualDeliveryDate: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        shippingName: 'Lisa Martinez',
+        shippingAddress1: '888 Oak Avenue',
+        shippingAddress2: '',
+        shippingCity: 'Austin',
+        shippingState: 'TX',
+        shippingZip: '78701',
+        shippingCountry: 'United States',
+        shippingCarrier: '',
+        shippingService: '',
+        trackingNumber: '',
+        shippingCost: '0.00'
+      },
       notes: 'Local pickup completed. Customer very satisfied.',
       createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
@@ -1083,6 +1197,25 @@ export const useLocalStorage = () => {
           notes: '50% deposit by check'
         }
       ],
+      shipping: {
+        orderSubmittedDate: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        orderConfirmedDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        expectedShipDate: '',
+        actualShipDate: '',
+        expectedDeliveryDate: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        actualDeliveryDate: '',
+        shippingName: 'Joe Henderson',
+        shippingAddress1: '742 Evergreen Terrace',
+        shippingAddress2: '',
+        shippingCity: 'Springfield',
+        shippingState: 'OR',
+        shippingZip: '97477',
+        shippingCountry: 'United States',
+        shippingCarrier: '',
+        shippingService: '',
+        trackingNumber: '',
+        shippingCost: '0.00'
+      },
       notes: 'Referral from antique shop. Rush job for estate sale.',
       createdAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
