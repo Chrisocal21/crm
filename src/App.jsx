@@ -3404,12 +3404,22 @@ function App() {
             {/* Order Detail Modal */}
             {modalType === 'orderDetail' && selectedOrder && (
               <>
-                <div className="p-4 sm:p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-white">{selectedOrder.orderNumber}</h2>
-                    <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                      Created {formatDate(selectedOrder.createdAt)}
-                    </p>
+                <div className="p-6 border-b border-slate-800/50 flex justify-between items-start flex-shrink-0 bg-gradient-to-r from-slate-900/50 to-slate-800/30">
+                  <div className="flex items-start space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-blue-500/30">
+                      <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-white mb-1">{selectedOrder.orderNumber}</h2>
+                      <p className="text-sm text-slate-400 flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>Created {formatDate(selectedOrder.createdAt)}</span>
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center space-x-2">
                     {/* Invoice Actions */}
@@ -3604,44 +3614,65 @@ function App() {
                   </div>
                 </div>
                 
-                <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1">
-                  {/* Client Info */}
-                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                    <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center space-x-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      <span>Client</span>
-                    </h3>
-                    <div className="text-white font-medium">{clients.find(c => c.id === selectedOrder.clientId)?.name || 'Unknown'}</div>
-                    <div className="text-sm text-slate-400">{clients.find(c => c.id === selectedOrder.clientId)?.email || ''}</div>
+                <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                  {/* Main Info Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Client Info Card */}
+                    <div className="bg-gradient-to-br from-slate-800/50 to-slate-800/30 rounded-xl p-5 border border-slate-700/50 hover:border-slate-600/50 transition-colors">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">Client Information</h3>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-lg font-bold text-white">{clients.find(c => c.id === selectedOrder.clientId)?.name || 'Unknown'}</div>
+                        <div className="flex items-center space-x-2 text-sm text-slate-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          <span>{clients.find(c => c.id === selectedOrder.clientId)?.email || ''}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Card */}
+                    <div className="bg-gradient-to-br from-slate-800/50 to-slate-800/30 rounded-xl p-5 border border-slate-700/50 hover:border-slate-600/50 transition-colors">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">Order Status</h3>
+                      </div>
+                      <select
+                        value={formData.status || selectedOrder.status}
+                        onChange={(e) => setFormData({...formData, status: e.target.value})}
+                        className="w-full p-3 bg-slate-800/80 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
+                      >
+                        {CONFIG.statuses.map(status => (
+                          <option key={status.id} value={status.id}>
+                            {status.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  {/* Status */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
-                    <select
-                      value={formData.status || selectedOrder.status}
-                      onChange={(e) => setFormData({...formData, status: e.target.value})}
-                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
-                    >
-                      {CONFIG.statuses.map(status => (
-                        <option key={status.id} value={status.id}>
-                          {status.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Order Items */}
-                  <div>
-                    <div className="flex justify-between items-center mb-3">
-                      <h3 className="text-sm font-semibold text-slate-300 flex items-center space-x-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                        <span>Order Items</span>
-                      </h3>
+                  {/* Order Items Section */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-800/30 rounded-xl p-6 border border-slate-700/50">
+                    <div className="flex justify-between items-center mb-5">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-white">Order Items</h3>
+                      </div>
                       <button
                         onClick={() => {
                           const newItem = {
@@ -3656,7 +3687,7 @@ function App() {
                           const currentItems = formData.items || selectedOrder.items || []
                           setFormData({ ...formData, items: [...currentItems, newItem] })
                         }}
-                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm flex items-center space-x-1"
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium flex items-center space-x-2 transition-colors shadow-lg shadow-blue-500/20"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -3667,9 +3698,9 @@ function App() {
                     
                     <div className="space-y-4">
                       {(formData.items || selectedOrder.items || []).map((item, itemIndex) => (
-                        <div key={item.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-3">
-                          <div className="flex justify-between items-start">
-                            <span className="text-xs font-semibold text-slate-400">Item #{itemIndex + 1}</span>
+                        <div key={item.id} className="bg-slate-900/50 rounded-lg p-5 border border-slate-700/50 hover:border-slate-600 transition-all space-y-4">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Item #{itemIndex + 1}</span>
                             {(formData.items || selectedOrder.items || []).length > 1 && (
                               <button
                                 onClick={() => {
@@ -3677,7 +3708,8 @@ function App() {
                                   const updatedItems = currentItems.filter((_, i) => i !== itemIndex)
                                   setFormData({ ...formData, items: updatedItems })
                                 }}
-                                className="text-red-400 hover:text-red-300 text-sm"
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-2 rounded-lg transition-colors"
+                                title="Remove item"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -3686,43 +3718,45 @@ function App() {
                             )}
                           </div>
                           
-                          <div>
-                            <label className="block text-xs font-medium text-slate-300 mb-1">Product Type</label>
-                            <select
-                              value={item.type}
-                              onChange={(e) => {
-                                const currentItems = [...(formData.items || selectedOrder.items || [])]
-                                currentItems[itemIndex] = { ...currentItems[itemIndex], type: e.target.value }
-                                setFormData({ ...formData, items: currentItems })
-                              }}
-                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
-                            >
-                              {CONFIG.productTypes.map(type => (
-                                <option key={type.id} value={type.id}>
-                                  {type.label} (${type.basePrice})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          
-                          <div>
-                            <label className="block text-xs font-medium text-slate-300 mb-1">Description</label>
-                            <textarea
-                              value={item.description}
-                              onChange={(e) => {
-                                const currentItems = [...(formData.items || selectedOrder.items || [])]
-                                currentItems[itemIndex] = { ...currentItems[itemIndex], description: e.target.value }
-                                setFormData({ ...formData, items: currentItems })
-                              }}
-                              className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
-                              rows="2"
-                              placeholder="Item description..."
-                            />
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 gap-4">
                             <div>
-                              <label className="block text-xs font-medium text-slate-300 mb-1">Quantity</label>
+                              <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide">Product Type</label>
+                              <select
+                                value={item.type}
+                                onChange={(e) => {
+                                  const currentItems = [...(formData.items || selectedOrder.items || [])]
+                                  currentItems[itemIndex] = { ...currentItems[itemIndex], type: e.target.value }
+                                  setFormData({ ...formData, items: currentItems })
+                                }}
+                                className="w-full p-3 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
+                              >
+                                {CONFIG.productTypes.map(type => (
+                                  <option key={type.id} value={type.id}>
+                                    {type.label} (${type.basePrice})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide">Description</label>
+                              <textarea
+                                value={item.description}
+                                onChange={(e) => {
+                                  const currentItems = [...(formData.items || selectedOrder.items || [])]
+                                  currentItems[itemIndex] = { ...currentItems[itemIndex], description: e.target.value }
+                                  setFormData({ ...formData, items: currentItems })
+                                }}
+                                className="w-full p-3 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all resize-none"
+                                rows="2"
+                                placeholder="Item description..."
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide">Quantity</label>
                               <input
                                 type="number"
                                 min="1"
@@ -3732,11 +3766,11 @@ function App() {
                                   currentItems[itemIndex] = { ...currentItems[itemIndex], quantity: parseInt(e.target.value) || 1 }
                                   setFormData({ ...formData, items: currentItems })
                                 }}
-                                className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                className="w-full p-3 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-slate-300 mb-1">Size</label>
+                              <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide">Size</label>
                               <select
                                 value={item.size}
                                 onChange={(e) => {
@@ -3744,7 +3778,7 @@ function App() {
                                   currentItems[itemIndex] = { ...currentItems[itemIndex], size: e.target.value }
                                   setFormData({ ...formData, items: currentItems })
                                 }}
-                                className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                className="w-full p-3 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
                               >
                                 {CONFIG.sizes.map(size => (
                                   <option key={size.id} value={size.id}>
@@ -3754,7 +3788,7 @@ function App() {
                               </select>
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-slate-300 mb-1">Material</label>
+                              <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide">Material</label>
                               <select
                                 value={item.material}
                                 onChange={(e) => {
@@ -3762,7 +3796,7 @@ function App() {
                                   currentItems[itemIndex] = { ...currentItems[itemIndex], material: e.target.value }
                                   setFormData({ ...formData, items: currentItems })
                                 }}
-                                className="w-full p-2 bg-slate-800 border border-slate-700 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                                className="w-full p-3 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
                               >
                                 {CONFIG.materials.map(material => (
                                   <option key={material.id} value={material.id}>
@@ -3774,10 +3808,10 @@ function App() {
                           </div>
                           
                           <div>
-                            <label className="block text-xs font-medium text-slate-300 mb-1">Add-ons</label>
-                            <div className="flex flex-wrap gap-1">
+                            <label className="block text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wide">Add-ons</label>
+                            <div className="flex flex-wrap gap-2">
                               {CONFIG.addons.map(addon => (
-                                <label key={addon.id} className="flex items-center space-x-1 px-2 py-1 bg-slate-800 rounded hover:bg-slate-700 cursor-pointer text-xs">
+                                <label key={addon.id} className="flex items-center space-x-2 px-3 py-2 bg-slate-800/80 rounded-lg hover:bg-slate-700/80 cursor-pointer text-sm border border-slate-700 hover:border-blue-500/50 transition-all">
                                   <input
                                     type="checkbox"
                                     checked={(item.addons || []).includes(addon.id)}
@@ -3792,19 +3826,22 @@ function App() {
                                       }
                                       setFormData({ ...formData, items: currentItems })
                                     }}
-                                    className="w-3 h-3"
+                                    className="w-4 h-4 text-blue-600 bg-slate-900 border-slate-600 rounded focus:ring-blue-500 focus:ring-2"
                                   />
-                                  <span className="text-white flex items-center space-x-1"><Icon icon={addon.icon} className="w-3 h-3" /><span>{addon.label}</span></span>
+                                  <span className="text-white flex items-center space-x-1.5">
+                                    <Icon icon={addon.icon} className="w-3.5 h-3.5" />
+                                    <span>{addon.label}</span>
+                                  </span>
                                 </label>
                               ))}
                             </div>
                           </div>
                           
                           {/* Item subtotal */}
-                          <div className="pt-2 border-t border-slate-700">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-400">Item Total:</span>
-                              <span className="text-white font-medium">
+                          <div className="pt-4 border-t border-slate-700/50">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-slate-400 font-medium">Item Total:</span>
+                              <span className="text-lg font-bold text-green-400">
                                 {(() => {
                                   const itemPricing = calculateOrderPricing({
                                     productType: item.type,
@@ -3824,15 +3861,17 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Pricing - Auto-calculated from all items */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center space-x-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Total Pricing</span>
-                    </h3>
-                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-2">
+                  {/* Pricing Section */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-800/30 rounded-xl p-6 border border-slate-700/50">
+                    <div className="flex items-center space-x-3 mb-5">
+                      <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-white">Pricing Summary</h3>
+                    </div>
+                    <div className="space-y-3">
                       {(() => {
                         const items = formData.items || selectedOrder.items || []
                         let itemsSubtotal = 0
@@ -5028,7 +5067,7 @@ function App() {
                   </div>
                 </div>
                 
-                <div className="p-4 sm:p-6 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-stretch sm:items-center space-y-2 sm:space-y-0 flex-shrink-0">
+                <div className="p-6 border-t border-slate-800/50 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 flex-shrink-0 bg-gradient-to-r from-slate-900/50 to-slate-800/30">
                   <button 
                     onClick={() => {
                       showConfirm('Are you sure you want to delete this order?', () => {
@@ -5039,20 +5078,23 @@ function App() {
                         showSuccess('Order deleted successfully')
                       })
                     }}
-                    className="px-4 sm:px-6 py-2 bg-red-600/10 hover:bg-red-600/20 border border-red-600/30 text-red-400 rounded-lg transition-colors text-sm sm:text-base"
+                    className="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 text-red-400 rounded-lg transition-all font-medium flex items-center justify-center space-x-2"
                   >
-                    Delete Order
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>Delete Order</span>
                   </button>
-                  <div className="flex space-x-3">
+                  <div className="flex gap-3">
                     <button 
                       onClick={closeModal}
-                      className="px-4 sm:px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors text-white text-sm sm:text-base flex-1 sm:flex-none"
+                      className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg transition-all text-white font-medium flex-1 sm:flex-none"
                     >
                       Cancel
                     </button>
                     <button 
                       onClick={handleUpdateOrder}
-                      className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white text-sm sm:text-base flex-1 sm:flex-none"
+                      className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-600 rounded-lg transition-all text-white font-medium flex-1 sm:flex-none shadow-lg shadow-blue-500/20"
                     >
                       Save Changes
                     </button>
