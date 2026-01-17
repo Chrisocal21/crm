@@ -283,6 +283,162 @@ export const CONFIG = {
     }
   ],
 
+  emailTemplates: [
+    {
+      id: 'quote_request',
+      name: 'Quote Request Response',
+      category: 'sales',
+      subject: 'Your Custom Quote from {{business.name}}',
+      body: `Hi {{client.name}},
+
+Thank you for your interest in {{business.name}}! I'd be happy to provide you with a custom quote.
+
+Based on your request, here are the initial details:
+- Project: {{order.product.description}}
+- Estimated Timeline: {{order.timeline.leadTime}} days
+- Estimated Price: {{order.pricing.total}}
+
+I'll send over a detailed quote within 24 hours. In the meantime, feel free to reach out if you have any questions.
+
+Best regards,
+{{business.name}}
+{{business.email}}
+{{business.phone}}`,
+      variables: ['client.name', 'business.name', 'order.product.description', 'order.timeline.leadTime', 'order.pricing.total', 'business.email', 'business.phone']
+    },
+    {
+      id: 'order_confirmation',
+      name: 'Order Confirmation',
+      category: 'orders',
+      subject: 'Order Confirmed - {{order.orderNumber}}',
+      body: `Hi {{client.name}},
+
+Great news! Your order {{order.orderNumber}} has been confirmed and is now in production.
+
+Order Details:
+- Order #: {{order.orderNumber}}
+- Item: {{order.product.description}}
+- Total: {{order.pricing.total}}
+- Amount Paid: {{order.pricing.paid}}
+- Balance Due: {{order.pricing.balance}}
+- Expected Completion: {{order.timeline.dueDate}}
+
+We'll keep you updated on the progress. You can track your order status anytime by contacting us.
+
+Thank you for your business!
+
+{{business.name}}
+{{business.email}}
+{{business.phone}}`,
+      variables: ['client.name', 'order.orderNumber', 'order.product.description', 'order.pricing.total', 'order.pricing.paid', 'order.pricing.balance', 'order.timeline.dueDate', 'business.name', 'business.email', 'business.phone']
+    },
+    {
+      id: 'payment_reminder',
+      name: 'Payment Reminder',
+      category: 'payments',
+      subject: 'Payment Reminder - {{order.orderNumber}}',
+      body: `Hi {{client.name}},
+
+This is a friendly reminder about the outstanding balance on order {{order.orderNumber}}.
+
+Payment Details:
+- Order Total: {{order.pricing.total}}
+- Amount Paid: {{order.pricing.paid}}
+- Balance Due: {{order.pricing.balance}}
+
+Payment can be made via:
+- Venmo: @anchorcrm
+- PayPal: {{business.email}}
+- Zelle: {{business.phone}}
+- Wire Transfer (contact us for details)
+
+Please let me know if you have any questions or need to discuss a payment plan.
+
+Thank you,
+{{business.name}}
+{{business.email}}`,
+      variables: ['client.name', 'order.orderNumber', 'order.pricing.total', 'order.pricing.paid', 'order.pricing.balance', 'business.name', 'business.email', 'business.phone']
+    },
+    {
+      id: 'shipping_notification',
+      name: 'Shipping Notification',
+      category: 'shipping',
+      subject: 'Your Order Has Shipped! - {{order.orderNumber}}',
+      body: `Hi {{client.name}},
+
+Exciting news! Your order {{order.orderNumber}} has shipped and is on its way!
+
+Shipping Details:
+- Carrier: {{order.shipping.carrier}}
+- Tracking Number: {{order.shipping.trackingNumber}}
+- Expected Delivery: {{order.shipping.expectedDelivery}}
+
+You can track your package at:
+- USPS: https://tools.usps.com/go/TrackConfirmAction
+- UPS: https://www.ups.com/track
+- FedEx: https://www.fedex.com/fedextrack/
+
+Please inspect your order upon delivery and contact us immediately if there are any issues.
+
+Thank you for your order!
+
+{{business.name}}
+{{business.email}}
+{{business.phone}}`,
+      variables: ['client.name', 'order.orderNumber', 'order.shipping.carrier', 'order.shipping.trackingNumber', 'order.shipping.expectedDelivery', 'business.name', 'business.email', 'business.phone']
+    },
+    {
+      id: 'order_complete',
+      name: 'Order Complete - Thank You',
+      category: 'completion',
+      subject: 'Thank You for Your Order! - {{order.orderNumber}}',
+      body: `Hi {{client.name}},
+
+Your order {{order.orderNumber}} is now complete! It's been a pleasure working with you on this project.
+
+I hope you're thrilled with the final result. Your satisfaction is my top priority, so please don't hesitate to reach out if you need anything.
+
+Would you mind leaving a review? Your feedback helps other customers and means the world to me. [Leave a Review Link]
+
+I look forward to working with you again soon!
+
+Best regards,
+{{business.name}}
+{{business.email}}
+{{business.phone}}`,
+      variables: ['client.name', 'order.orderNumber', 'business.name', 'business.email', 'business.phone']
+    },
+    {
+      id: 'follow_up',
+      name: 'General Follow-Up',
+      category: 'general',
+      subject: 'Checking In - {{business.name}}',
+      body: `Hi {{client.name}},
+
+I wanted to reach out and see how everything is going with your recent order from {{business.name}}.
+
+Are you enjoying your {{order.product.description}}? I'd love to hear your feedback!
+
+If you're interested in any future projects or have friends who might need similar work, I'd be happy to discuss.
+
+Stay in touch!
+
+{{business.name}}
+{{business.email}}
+{{business.phone}}`,
+      variables: ['client.name', 'business.name', 'order.product.description', 'business.email', 'business.phone']
+    }
+  ],
+
+  emailCategories: [
+    { id: 'sales', label: 'Sales & Quotes', color: '#6366f1', icon: '💰' },
+    { id: 'orders', label: 'Order Updates', color: '#0ea5e9', icon: '📦' },
+    { id: 'payments', label: 'Payment & Billing', color: '#d97706', icon: '💳' },
+    { id: 'shipping', label: 'Shipping & Delivery', color: '#059669', icon: '🚚' },
+    { id: 'completion', label: 'Completion & Thanks', color: '#16a34a', icon: '✅' },
+    { id: 'general', label: 'General', color: '#8b5cf6', icon: '✉️' }
+  ],
+
   notifications: {
     emailEnabled: true,
     smsEnabled: false,

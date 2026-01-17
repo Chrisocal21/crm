@@ -15,6 +15,11 @@ export const useLocalStorage = () => {
     USERS: 'anchor_crm_users',
     ACTIVE_TIMERS: 'anchor_crm_active_timers',
     CONNECTED_STORES: 'anchor_crm_connected_stores',
+    EVENTS: 'anchor_crm_events',
+    ENABLED_STORES: 'anchor_crm_enabled_stores',
+    NOTIFICATION_READ_STATUS: 'anchor_crm_notification_read_status',
+    PROFILE_IMAGE: 'anchor_crm_profile_image',
+    CURRENT_USER: 'anchor_crm_current_user',
     INITIALIZED: 'anchor_crm_initialized'
   };
 
@@ -1556,7 +1561,13 @@ export const useLocalStorage = () => {
 
   // Clear all data
   const clearAllData = () => {
-    Object.values(KEYS).forEach(key => localStorage.removeItem(key));
+    Object.values(KEYS).forEach(key => {
+      if (key !== KEYS.INITIALIZED) {
+        localStorage.removeItem(key);
+      }
+    });
+    // Keep the initialized flag to prevent mock data from loading again
+    localStorage.setItem(KEYS.INITIALIZED, 'true');
     console.log('🗑️ All CRM data cleared');
   };
 

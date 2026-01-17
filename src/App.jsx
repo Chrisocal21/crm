@@ -18,6 +18,7 @@ import EmailTemplatesView from './components/views/EmailTemplatesView'
 import TimesheetsView from './components/views/TimesheetsView'
 import TimelineView from './components/views/TimelineView'
 import SettingsView from './components/views/SettingsViewV2'
+import CommandPalette from './components/CommandPalette'
 import LandingPage from './components/LandingPage'
 import SignInView from './components/auth/SignInView'
 import SignUpView from './components/auth/SignUpView'
@@ -62,6 +63,7 @@ function App() {
   const [stats, setStats] = useState({})
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [modalType, setModalType] = useState(null) // 'newClient', 'newOrder', 'editOrder', etc.
   const [formData, setFormData] = useState({})
   const [showSettings, setShowSettings] = useState(false)
@@ -129,6 +131,20 @@ function App() {
   })
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
+  const [showBulkShippingModal, setShowBulkShippingModal] = useState(false)
+  const [bulkShippingData, setBulkShippingData] = useState({
+    actualShipDate: '',
+    shippingCarrier: '',
+    shippingService: '',
+    trackingNumber: ''
+  })
+  const [showQuickShipModal, setShowQuickShipModal] = useState(false)
+  const [quickShipOrder, setQuickShipOrder] = useState(null)
+  const [quickShipData, setQuickShipData] = useState({
+    actualShipDate: new Date().toISOString().split('T')[0],
+    carrier: '',
+    trackingNumber: ''
+  })
   const [timesheetFilters, setTimesheetFilters] = useState({
     search: '',
     startDate: '',
@@ -233,6 +249,19 @@ function App() {
       setIsLoggedIn(false)
     }
   }, [currentUser])
+
+  // Command Palette keyboard shortcut (CMD+K or CTRL+K)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setShowCommandPalette(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const loadData = () => {
     const allOrders = dataManager.orders.getAll()
@@ -839,6 +868,8 @@ function App() {
   // Get pending tasks and notifications
   const getPendingNotifications = () => {
     const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    
     const overdueTasks = tasks.filter(t => !t.completed && new Date(t.dueDate) < now).map(t => ({
       ...t,
       type: 'overdue_task',
@@ -859,13 +890,62 @@ function App() {
       notifId: `order-${o.id}`
     }))
     
-    const allNotifications = [...overdueTasks, ...upcomingTasks, ...overdueOrders]
+    // Shipping alerts
+    const shipOverdue = orders.filter(o => {
+      if (!o.shipping?.expectedShipDate || o.shipping?.actualShipDate) return false
+      const expectedShip = new Date(o.shipping.expectedShipDate)
+      expectedShip.setHours(0, 0, 0, 0)
+      return expectedShip < now
+    }).map(o => {
+      const expectedShip = new Date(o.shipping.expectedShipDate)
+      expectedShip.setHours(0, 0, 0, 0)
+      const daysOverdue = Math.ceil((now - expectedShip) / (1000 * 60 * 60 * 24))
+      return {
+        ...o,
+        type: 'ship_overdue',
+        daysOverdue,
+        notifId: `ship-overdue-${o.id}`
+      }
+    })
+    
+    const shipToday = orders.filter(o => {
+      if (!o.shipping?.expectedShipDate || o.shipping?.actualShipDate) return false
+      const expectedShip = new Date(o.shipping.expectedShipDate)
+      expectedShip.setHours(0, 0, 0, 0)
+      return expectedShip.getTime() === now.getTime()
+    }).map(o => ({
+      ...o,
+      type: 'ship_today',
+      notifId: `ship-today-${o.id}`
+    }))
+    
+    const deliveryOverdue = orders.filter(o => {
+      if (!o.shipping?.expectedDeliveryDate || o.shipping?.actualDeliveryDate) return false
+      const expectedDelivery = new Date(o.shipping.expectedDeliveryDate)
+      expectedDelivery.setHours(0, 0, 0, 0)
+      return expectedDelivery < now
+    }).map(o => {
+      const expectedDelivery = new Date(o.shipping.expectedDeliveryDate)
+      expectedDelivery.setHours(0, 0, 0, 0)
+      const daysOverdue = Math.ceil((now - expectedDelivery) / (1000 * 60 * 60 * 24))
+      return {
+        ...o,
+        type: 'delivery_overdue',
+        daysOverdue,
+        notifId: `delivery-overdue-${o.id}`
+      }
+    })
+    
+    const allNotifications = [...overdueTasks, ...upcomingTasks, ...overdueOrders, ...shipOverdue, ...shipToday, ...deliveryOverdue]
     const unreadCount = allNotifications.filter(n => !notificationReadStatus[n.notifId]).length
     
     return {
       overdueTasks,
       upcomingTasks,
       overdueOrders,
+      shipOverdue,
+      shipToday,
+      deliveryOverdue,
       all: allNotifications,
       total: allNotifications.length,
       unread: unreadCount
@@ -1061,6 +1141,72 @@ function App() {
       setSelectedOrders([])
       showSuccess(`${selectedOrders.length} order(s) deleted successfully`)
     })
+  }
+
+  const bulkUpdateShipping = () => {
+    selectedOrders.forEach(orderId => {
+      const order = orders.find(o => o.id === orderId)
+      if (order) {
+        const updatedOrder = {
+          ...order,
+          shipping: {
+            ...order.shipping,
+            ...(bulkShippingData.actualShipDate && { actualShipDate: bulkShippingData.actualShipDate }),
+            ...(bulkShippingData.shippingCarrier && { shippingCarrier: bulkShippingData.shippingCarrier }),
+            ...(bulkShippingData.shippingService && { shippingService: bulkShippingData.shippingService }),
+            ...(bulkShippingData.trackingNumber && { trackingNumber: bulkShippingData.trackingNumber })
+          },
+          updatedAt: new Date().toISOString()
+        }
+        // Update status to shipped if actual ship date is set
+        if (bulkShippingData.actualShipDate && order.status !== 'shipped' && order.status !== 'completed') {
+          updatedOrder.status = 'shipped'
+        }
+        dataManager.orders.save(updatedOrder)
+      }
+    })
+    loadData()
+    setSelectedOrders([])
+    setShowBulkShippingModal(false)
+    setBulkShippingData({
+      actualShipDate: '',
+      shippingCarrier: '',
+      shippingService: '',
+      trackingNumber: ''
+    })
+    showSuccess(`Updated shipping for ${selectedOrders.length} order(s)`)
+  }
+
+  const quickShipOrder_handler = (order) => {
+    setQuickShipOrder(order)
+    setQuickShipData({
+      actualShipDate: new Date().toISOString().split('T')[0],
+      carrier: order.shipping?.shippingCarrier || '',
+      trackingNumber: order.shipping?.trackingNumber || ''
+    })
+    setShowQuickShipModal(true)
+  }
+
+  const submitQuickShip = () => {
+    if (!quickShipOrder) return
+    
+    const updatedOrder = {
+      ...quickShipOrder,
+      status: 'shipped',
+      shipping: {
+        ...quickShipOrder.shipping,
+        actualShipDate: quickShipData.actualShipDate,
+        shippingCarrier: quickShipData.carrier || quickShipOrder.shipping?.shippingCarrier,
+        trackingNumber: quickShipData.trackingNumber
+      }
+    }
+    
+    dataManager.orders.save(updatedOrder)
+    setShowQuickShipModal(false)
+    setQuickShipOrder(null)
+    setQuickShipData({ actualShipDate: new Date().toISOString().split('T')[0], carrier: '', trackingNumber: '' })
+    loadData()
+    showSuccess(`Order ${quickShipOrder.orderNumber} marked as shipped`)
   }
 
   const exportToCSV = (ordersList) => {
@@ -2173,7 +2319,7 @@ function App() {
 
                         {/* Overdue Orders */}
                         {getPendingNotifications().overdueOrders.length > 0 && (
-                          <div className="p-4">
+                          <div className="p-4 border-b border-slate-800/50">
                             <div className="flex items-center space-x-2 mb-3">
                               <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
                               <p className="text-xs font-bold text-orange-400 uppercase tracking-wider">Overdue Orders</p>
@@ -2213,6 +2359,166 @@ function App() {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                           </svg>
                                           Due: {new Date(order.timeline.dueDate).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                      <svg className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                      </svg>
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Ship Overdue */}
+                        {getPendingNotifications().shipOverdue.length > 0 && (
+                          <div className="p-4 border-b border-slate-800/50">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>
+                              <p className="text-xs font-bold text-red-400 uppercase tracking-wider">Ship Overdue</p>
+                            </div>
+                            <div className="space-y-2">
+                              {getPendingNotifications().shipOverdue.map(order => {
+                                const client = clients.find(c => c.id === order.clientId)
+                                const isRead = notificationReadStatus[order.notifId]
+                                return (
+                                  <button
+                                    key={order.id}
+                                    onClick={() => {
+                                      markNotificationAsRead(order.notifId)
+                                      openOrderDetailModal(order)
+                                      setShowNotifications(false)
+                                    }}
+                                    className={`w-full p-3 rounded-xl transition-all text-left group ${
+                                      isRead 
+                                        ? 'bg-slate-800/30 border border-slate-700/30' 
+                                        : 'bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/30 hover:border-red-500/50'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center space-x-2 mb-1">
+                                          {!isRead && <div className="w-2 h-2 bg-red-500 rounded-full"></div>}
+                                          <p className={`font-semibold text-sm ${isRead ? 'text-slate-400' : 'text-white'}`}>{order.orderNumber}</p>
+                                        </div>
+                                        <p className="text-xs text-red-400 flex items-center">
+                                          <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                          </svg>
+                                          {client?.name} - {order.daysOverdue} day{order.daysOverdue !== 1 ? 's' : ''} late
+                                        </p>
+                                        <p className="text-xs text-red-400/80 mt-1 flex items-center">
+                                          <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                          </svg>
+                                          Expected: {new Date(order.shipping.expectedShipDate).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                      <svg className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                      </svg>
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Ship Today */}
+                        {getPendingNotifications().shipToday.length > 0 && (
+                          <div className="p-4 border-b border-slate-800/50">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                              <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Ship Today</p>
+                            </div>
+                            <div className="space-y-2">
+                              {getPendingNotifications().shipToday.map(order => {
+                                const client = clients.find(c => c.id === order.clientId)
+                                const isRead = notificationReadStatus[order.notifId]
+                                return (
+                                  <button
+                                    key={order.id}
+                                    onClick={() => {
+                                      markNotificationAsRead(order.notifId)
+                                      openOrderDetailModal(order)
+                                      setShowNotifications(false)
+                                    }}
+                                    className={`w-full p-3 rounded-xl transition-all text-left group ${
+                                      isRead 
+                                        ? 'bg-slate-800/30 border border-slate-700/30' 
+                                        : 'bg-gradient-to-br from-amber-500/10 to-amber-500/5 border border-amber-500/30 hover:border-amber-500/50'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center space-x-2 mb-1">
+                                          {!isRead && <div className="w-2 h-2 bg-amber-500 rounded-full"></div>}
+                                          <p className={`font-semibold text-sm ${isRead ? 'text-slate-400' : 'text-white'}`}>{order.orderNumber}</p>
+                                        </div>
+                                        <p className="text-xs text-amber-400 flex items-center">
+                                          <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                          </svg>
+                                          {client?.name}
+                                        </p>
+                                        <p className="text-xs text-amber-400/80 mt-1">Scheduled to ship today</p>
+                                      </div>
+                                      <svg className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                      </svg>
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Delivery Overdue */}
+                        {getPendingNotifications().deliveryOverdue.length > 0 && (
+                          <div className="p-4 border-b border-slate-800/50">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>
+                              <p className="text-xs font-bold text-red-400 uppercase tracking-wider">Delivery Overdue</p>
+                            </div>
+                            <div className="space-y-2">
+                              {getPendingNotifications().deliveryOverdue.map(order => {
+                                const client = clients.find(c => c.id === order.clientId)
+                                const isRead = notificationReadStatus[order.notifId]
+                                return (
+                                  <button
+                                    key={order.id}
+                                    onClick={() => {
+                                      markNotificationAsRead(order.notifId)
+                                      openOrderDetailModal(order)
+                                      setShowNotifications(false)
+                                    }}
+                                    className={`w-full p-3 rounded-xl transition-all text-left group ${
+                                      isRead 
+                                        ? 'bg-slate-800/30 border border-slate-700/30' 
+                                        : 'bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/30 hover:border-red-500/50'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center space-x-2 mb-1">
+                                          {!isRead && <div className="w-2 h-2 bg-red-500 rounded-full"></div>}
+                                          <p className={`font-semibold text-sm ${isRead ? 'text-slate-400' : 'text-white'}`}>{order.orderNumber}</p>
+                                        </div>
+                                        <p className="text-xs text-red-400 flex items-center">
+                                          <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                          </svg>
+                                          {client?.name} - {order.daysOverdue} day{order.daysOverdue !== 1 ? 's' : ''} late
+                                        </p>
+                                        <p className="text-xs text-red-400/80 mt-1 flex items-center">
+                                          <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                          </svg>
+                                          Expected: {new Date(order.shipping.expectedDeliveryDate).toLocaleDateString()}
                                         </p>
                                       </div>
                                       <svg className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2344,9 +2650,6 @@ function App() {
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
-                              3 new
-                            </span>
                             <button
                               onClick={() => showSuccess('Chat support coming soon!')}
                               className="w-6 h-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg flex items-center justify-center transition-all hover:scale-110 shadow-lg"
@@ -2359,98 +2662,15 @@ function App() {
                           </div>
                         </div>
                         
-                        {/* Quick Messages */}
-                        <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                          {/* Message 1 */}
-                          <button
-                            onClick={() => showSuccess('Chat support coming soon!')}
-                            className="w-full p-2 hover:bg-slate-800/50 rounded-lg transition-colors text-left group"
-                          >
-                            <div className="flex items-start space-x-2">
-                              <div className="relative flex-shrink-0">
-                                <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                                  S
-                                </div>
-                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <p className="text-sm text-white font-medium truncate">Support Team</p>
-                                  <span className="text-xs text-slate-500 flex-shrink-0">2m ago</span>
-                                </div>
-                                <p className="text-xs text-slate-400 line-clamp-2">Welcome! How can we help you today?</p>
-                              </div>
-                              <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5"></div>
-                            </div>
-                          </button>
-                          
-                          {/* Message 2 */}
-                          <button
-                            onClick={() => showSuccess('Chat support coming soon!')}
-                            className="w-full p-2 hover:bg-slate-800/50 rounded-lg transition-colors text-left group"
-                          >
-                            <div className="flex items-start space-x-2">
-                              <div className="relative flex-shrink-0">
-                                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                                  A
-                                </div>
-                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <p className="text-sm text-white font-medium truncate">Alex Morrison</p>
-                                  <span className="text-xs text-slate-500 flex-shrink-0">15m ago</span>
-                                </div>
-                                <p className="text-xs text-slate-400 line-clamp-2">Can you review the latest proposal?</p>
-                              </div>
-                              <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5"></div>
-                            </div>
-                          </button>
-                          
-                          {/* Message 3 */}
-                          <button
-                            onClick={() => showSuccess('Chat support coming soon!')}
-                            className="w-full p-2 hover:bg-slate-800/50 rounded-lg transition-colors text-left group"
-                          >
-                            <div className="flex items-start space-x-2">
-                              <div className="relative flex-shrink-0">
-                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                                  J
-                                </div>
-                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <p className="text-sm text-white font-medium truncate">Jamie Chen</p>
-                                  <span className="text-xs text-slate-500 flex-shrink-0">1h ago</span>
-                                </div>
-                                <p className="text-xs text-slate-400 line-clamp-2">Meeting rescheduled to 3 PM</p>
-                              </div>
-                              <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5"></div>
-                            </div>
-                          </button>
-                          
-                          {/* Older Messages */}
-                          <button
-                            onClick={() => showSuccess('Chat support coming soon!')}
-                            className="w-full p-2 hover:bg-slate-800/50 rounded-lg transition-colors text-left group"
-                          >
-                            <div className="flex items-start space-x-2">
-                              <div className="relative flex-shrink-0">
-                                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                                  M
-                                </div>
-                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-yellow-500 border-2 border-slate-900 rounded-full"></div>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <p className="text-sm text-white font-medium truncate">Mike Taylor</p>
-                                  <span className="text-xs text-slate-500 flex-shrink-0">3h ago</span>
-                                </div>
-                                <p className="text-xs text-slate-400 line-clamp-2">Thanks for the update!</p>
-                              </div>
-                            </div>
-                          </button>
+                        {/* Empty Messages State */}
+                        <div className="py-8 text-center">
+                          <div className="w-12 h-12 bg-slate-800/50 rounded-lg flex items-center justify-center mx-auto mb-3">
+                            <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                          </div>
+                          <p className="text-sm text-slate-400 mb-1">No messages yet</p>
+                          <p className="text-xs text-slate-500">Start a conversation with your team</p>
                         </div>
                       </div>
                       
@@ -2535,6 +2755,16 @@ function App() {
               toggleOrderSelection={toggleOrderSelection}
               selectAllOrders={selectAllOrders}
               activeConfig={activeConfig}
+              openBulkShippingModal={() => setShowBulkShippingModal(true)}
+              quickShipOrder={quickShipOrder_handler}
+              updateOrderStatus={(orderId, newStatus) => {
+                const order = orders.find(o => o.id === orderId)
+                if (order) {
+                  dataManager.orders.save({ ...order, status: newStatus })
+                  loadData()
+                  showSuccess(`Order status updated to ${activeConfig.statuses.find(s => s.id === newStatus)?.label}`)
+                }
+              }}
             />
           )}
 
@@ -2543,6 +2773,7 @@ function App() {
               clients={clients}
               orders={orders}
               openNewClientModal={openNewClientModal}
+              openNewOrderModal={openNewOrderModal}
               setCurrentView={setCurrentView}
             />
           )}
@@ -2844,6 +3075,7 @@ function App() {
           {currentView === 'timeline' && (
             <TimelineView
               orders={orders}
+              clients={clients}
               timelineView={timelineView}
               setTimelineView={setTimelineView}
               timelineDate={timelineDate}
@@ -2895,10 +3127,23 @@ function App() {
               showConfirm={showConfirm}
               showSuccess={showSuccess}
               dataManager={dataManager}
+              clients={clients}
+              orders={orders}
             />
           )}
         </main>
       </div>
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        setModalType={setModalType}
+        setFormData={setFormData}
+        setShowModal={setShowModal}
+      />
 
       {/* Modals */}
       {showModal && (
@@ -9257,6 +9502,220 @@ function App() {
           </div>
         ))}
       </div>
+
+      {/* Bulk Shipping Update Modal */}
+      {showBulkShippingModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-700 animate-scale-in">
+            <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-white">Update Shipping Information</h2>
+              <button
+                onClick={() => setShowBulkShippingModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 flex items-start gap-2">
+                <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-sm text-blue-300">
+                  <p className="font-medium">Updating {selectedOrders.length} order(s)</p>
+                  <p className="text-xs text-blue-400 mt-0.5">All selected orders will be updated to "Shipped" status</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Actual Ship Date
+                  </label>
+                  <input
+                    type="date"
+                    value={bulkShippingData.actualShipDate || ''}
+                    onChange={(e) => setBulkShippingData({...bulkShippingData, actualShipDate: e.target.value})}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Shipping Carrier
+                  </label>
+                  <select
+                    value={bulkShippingData.carrier || ''}
+                    onChange={(e) => setBulkShippingData({...bulkShippingData, carrier: e.target.value})}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Select carrier...</option>
+                    <option value="USPS">USPS</option>
+                    <option value="UPS">UPS</option>
+                    <option value="FedEx">FedEx</option>
+                    <option value="DHL">DHL</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Shipping Service
+                  </label>
+                  <select
+                    value={bulkShippingData.service || ''}
+                    onChange={(e) => setBulkShippingData({...bulkShippingData, service: e.target.value})}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Select service...</option>
+                    <option value="standard">Standard</option>
+                    <option value="expedited">Expedited</option>
+                    <option value="overnight">Overnight</option>
+                    <option value="priority">Priority</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Tracking Number
+                  </label>
+                  <input
+                    type="text"
+                    value={bulkShippingData.trackingNumber || ''}
+                    onChange={(e) => setBulkShippingData({...bulkShippingData, trackingNumber: e.target.value})}
+                    placeholder="Enter tracking number..."
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Expected Delivery Date
+                  </label>
+                  <input
+                    type="date"
+                    value={bulkShippingData.expectedDeliveryDate || ''}
+                    onChange={(e) => setBulkShippingData({...bulkShippingData, expectedDeliveryDate: e.target.value})}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowBulkShippingModal(false)
+                  setBulkShippingData({})
+                }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={bulkUpdateShipping}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+              >
+                Update {selectedOrders.length} Order{selectedOrders.length !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Ship Modal */}
+      {showQuickShipModal && quickShipOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-800 rounded-xl shadow-2xl max-w-md w-full border border-slate-700 animate-scale-in">
+            <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-white">Mark as Shipped</h2>
+                <p className="text-sm text-slate-400 mt-1">Order {quickShipOrder.orderNumber}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowQuickShipModal(false)
+                  setQuickShipOrder(null)
+                }}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Ship Date <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={quickShipData.actualShipDate}
+                  onChange={(e) => setQuickShipData({...quickShipData, actualShipDate: e.target.value})}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Carrier
+                </label>
+                <select
+                  value={quickShipData.carrier}
+                  onChange={(e) => setQuickShipData({...quickShipData, carrier: e.target.value})}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">Select carrier...</option>
+                  <option value="USPS">USPS</option>
+                  <option value="UPS">UPS</option>
+                  <option value="FedEx">FedEx</option>
+                  <option value="DHL">DHL</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Tracking Number
+                </label>
+                <input
+                  type="text"
+                  value={quickShipData.trackingNumber}
+                  onChange={(e) => setQuickShipData({...quickShipData, trackingNumber: e.target.value})}
+                  placeholder="Enter tracking number..."
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowQuickShipModal(false)
+                  setQuickShipOrder(null)
+                }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitQuickShip}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Mark as Shipped</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Dialog */}
       {confirmDialog && (
