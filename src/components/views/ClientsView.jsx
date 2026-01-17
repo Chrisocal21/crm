@@ -113,16 +113,6 @@ const ClientsView = ({
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-      {/* Keyboard shortcuts help */}
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-          <div className="text-blue-300"><kbd className="px-1.5 py-0.5 bg-slate-800 rounded">N</kbd> New Client</div>
-          <div className="text-blue-300"><kbd className="px-1.5 py-0.5 bg-slate-800 rounded">/</kbd> Search</div>
-          <div className="text-blue-300"><kbd className="px-1.5 py-0.5 bg-slate-800 rounded">F</kbd> Filters</div>
-          <div className="text-blue-300"><kbd className="px-1.5 py-0.5 bg-slate-800 rounded">Esc</kbd> Clear</div>
-        </div>
-      </div>
-
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-white">All Clients</h2>
         <button

@@ -341,22 +341,6 @@ const OrdersView = ({
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-      {/* Keyboard Shortcuts Help */}
-      <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-3">
-        <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-        </svg>
-        <div className="text-xs text-blue-300">
-          <p className="font-medium mb-1">Keyboard Shortcuts:</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <span><kbd className="px-1.5 py-0.5 bg-blue-500/20 rounded">N</kbd> New Order</span>
-            <span><kbd className="px-1.5 py-0.5 bg-blue-500/20 rounded">/</kbd> Search</span>
-            <span><kbd className="px-1.5 py-0.5 bg-blue-500/20 rounded">F</kbd> Filters</span>
-            <span><kbd className="px-1.5 py-0.5 bg-blue-500/20 rounded">E</kbd> Export</span>
-          </div>
-        </div>
-      </div>
-
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div className="flex items-center gap-4">
           <h2 className="text-2xl font-bold text-white">

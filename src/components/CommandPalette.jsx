@@ -37,6 +37,7 @@ const CommandPalette = ({
     { id: 'nav-bids', label: 'Go to Bids', icon: '💼', category: 'Navigation', action: () => setCurrentView('bids') },
     { id: 'nav-inventory', label: 'Go to Inventory', icon: '📦', category: 'Navigation', action: () => setCurrentView('inventory') },
     { id: 'nav-invoices', label: 'Go to Invoices', icon: '🧾', category: 'Navigation', action: () => setCurrentView('invoices'), shortcut: 'I' },
+    { id: 'nav-expenses', label: 'Go to Expenses', icon: '💰', category: 'Navigation', action: () => setCurrentView('expenses'), shortcut: 'E' },
     { id: 'nav-timesheets', label: 'Go to Timesheets', icon: '⏱️', category: 'Navigation', action: () => setCurrentView('timesheets') },
     { id: 'nav-templates', label: 'Go to Email Templates', icon: '📧', category: 'Navigation', action: () => setCurrentView('emailTemplates') },
     { id: 'nav-settings', label: 'Go to Settings', icon: '⚙️', category: 'Navigation', action: () => setCurrentView('settings'), shortcut: 'S' },

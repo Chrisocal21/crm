@@ -3,9 +3,12 @@ import { useState, useEffect, useRef } from 'react'
 const TasksView = ({ 
   tasks, 
   setTasks,
+  clients,
+  orders,
   setModalType, 
   setFormData, 
   setShowModal,
+  openOrderDetailModal,
   showConfirm,
   showSuccess
 }) => {
@@ -16,7 +19,20 @@ const TasksView = ({
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [sortBy, setSortBy] = useState('dueDate')
   const [sortDirection, setSortDirection] = useState('asc')
+  const [selectedTasks, setSelectedTasks] = useState([])
+  const [showBulkActions, setShowBulkActions] = useState(false)
+  const [savedViews, setSavedViews] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_task_views')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [showSaveViewModal, setShowSaveViewModal] = useState(false)
+  const [newViewName, setNewViewName] = useState('')
   const searchInputRef = useRef(null)
+
+  // Persist saved views
+  useEffect(() => {
+    localStorage.setItem('anchor_crm_task_views', JSON.stringify(savedViews))
+  }, [savedViews])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -66,6 +82,55 @@ const TasksView = ({
     setModalType('editTask')
     setFormData(task)
     setShowModal(true)
+  }
+
+  const saveCurrentView = () => {
+    if (!newViewName.trim()) {
+      return
+    }
+
+    const newView = {
+      id: `view-${Date.now()}`,
+      name: newViewName,
+      filters: {
+        statusFilter,
+        categoryFilter,
+        priorityFilter,
+        searchQuery
+      },
+      sort: {
+        sortBy,
+        sortDirection
+      },
+      createdAt: new Date().toISOString()
+    }
+
+    setSavedViews([...savedViews, newView])
+    setNewViewName('')
+    setShowSaveViewModal(false)
+    showSuccess(`View "${newViewName}" saved!`)
+  }
+
+  const loadView = (view) => {
+    setStatusFilter(view.filters.statusFilter)
+    setCategoryFilter(view.filters.categoryFilter)
+    setPriorityFilter(view.filters.priorityFilter)
+    setSearchQuery(view.filters.searchQuery)
+    setSortBy(view.sort.sortBy)
+    setSortDirection(view.sort.sortDirection)
+    showSuccess(`Loaded view: ${view.name}`)
+  }
+
+  const deleteView = (viewId) => {
+    const view = savedViews.find(v => v.id === viewId)
+    showConfirm(
+      `Delete view "${view.name}"?`,
+      'This action cannot be undone.',
+      () => {
+        setSavedViews(savedViews.filter(v => v.id !== viewId))
+        showSuccess('View deleted')
+      }
+    )
   }
 
   const handleToggleComplete = (taskId) => {
@@ -180,19 +245,6 @@ const TasksView = ({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Keyboard shortcuts help */}
-      <div className="bg-blue-600/10 border border-blue-600/30 rounded-xl p-3 mb-4">
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-4">
-            <span className="text-blue-400 font-medium">Keyboard Shortcuts:</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">N</kbd> New Task</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">/</kbd> Search</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">F</kbd> Filters</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">Esc</kbd> Clear</span>
-          </div>
-        </div>
-      </div>
-
       {/* Statistics Cards */}
       <div className="grid grid-cols-5 gap-3 mb-4">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -254,6 +306,49 @@ const TasksView = ({
             New Task
           </button>
 
+          {/* Task Templates Dropdown */}
+          <div className="relative group">
+            <button
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+              </svg>
+              Templates
+            </button>
+            <div className="absolute left-0 mt-2 w-72 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <div className="p-2">
+                <div className="text-xs text-slate-500 px-3 py-2 font-medium">Quick Create</div>
+                {[
+                  { title: 'Follow up with client', category: 'sales', priority: 'high', description: 'Check in on project status' },
+                  { title: 'Send project update', category: 'admin', priority: 'medium', description: 'Weekly progress report' },
+                  { title: 'Review order details', category: 'production', priority: 'medium', description: 'Verify specifications' },
+                  { title: 'Process payment', category: 'admin', priority: 'high', description: 'Invoice follow-up' },
+                  { title: 'Quality check', category: 'production', priority: 'medium', description: 'Final inspection' },
+                ].map((template, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      const taskData = {
+                        id: `task-${Date.now()}`,
+                        ...template,
+                        status: 'pending',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                      }
+                      setTasks([...tasks, taskData])
+                      showSuccess(`Created task: ${template.title}`)
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded transition-colors"
+                  >
+                    <div className="text-sm text-white font-medium">{template.title}</div>
+                    <div className="text-xs text-slate-400">{template.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <button
             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
             className={`px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2 ${
@@ -267,6 +362,72 @@ const TasksView = ({
             </svg>
             Filters
           </button>
+
+          {/* Saved Views */}
+          <div className="relative group">
+            <button
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+              </svg>
+              Saved Views
+              {savedViews.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">{savedViews.length}</span>
+              )}
+            </button>
+            <div className="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <div className="p-2">
+                <button
+                  onClick={() => setShowSaveViewModal(true)}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors font-medium"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Save Current View
+                </button>
+                {savedViews.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-700 my-2"></div>
+                    <div className="text-xs text-slate-500 px-3 py-1 font-medium">Your Views</div>
+                    {savedViews.map(view => (
+                      <div key={view.id} className="flex items-center gap-1 group/item">
+                        <button
+                          onClick={() => loadView(view)}
+                          className="flex-1 text-left px-3 py-2 hover:bg-slate-700 rounded text-white text-sm transition-colors"
+                        >
+                          <div className="font-medium">{view.name}</div>
+                          <div className="text-xs text-slate-500">
+                            {view.filters.statusFilter !== 'all' && `Status: ${view.filters.statusFilter} • `}
+                            {view.filters.categoryFilter !== 'all' && `Category: ${view.filters.categoryFilter} • `}
+                            {view.sort.sortBy}
+                          </div>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteView(view.id)
+                          }}
+                          className="opacity-0 group-hover/item:opacity-100 p-1.5 hover:bg-red-600/20 rounded text-slate-400 hover:text-red-400 transition-all"
+                          title="Delete view"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {savedViews.length === 0 && (
+                  <div className="px-3 py-4 text-center text-slate-500 text-sm">
+                    No saved views yet
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {showAdvancedFilters && (
@@ -314,6 +475,103 @@ const TasksView = ({
           </div>
         )}
       </div>
+
+      {/* Bulk Actions Bar */}
+      {selectedTasks.length > 0 && (
+        <div className="bg-blue-600/20 border border-blue-600/50 rounded-lg p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-blue-400">
+                {selectedTasks.length} {selectedTasks.length === 1 ? 'task' : 'tasks'} selected
+              </span>
+              <button
+                onClick={() => setSelectedTasks([])}
+                className="text-xs text-blue-300 hover:text-white transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setTasks(tasks.map(t => 
+                    selectedTasks.includes(t.id) ? { ...t, status: 'completed', updatedAt: new Date().toISOString() } : t
+                  ))
+                  showSuccess(`Marked ${selectedTasks.length} tasks as complete`)
+                  setSelectedTasks([])
+                }}
+                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm font-medium transition-colors flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Complete
+              </button>
+              <button
+                onClick={() => {
+                  showConfirm(
+                    `Delete ${selectedTasks.length} tasks?`,
+                    'This action cannot be undone.',
+                    () => {
+                      setTasks(tasks.filter(t => !selectedTasks.includes(t.id)))
+                      showSuccess(`Deleted ${selectedTasks.length} tasks`)
+                      setSelectedTasks([])
+                    }
+                  )
+                }}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-white text-sm font-medium transition-colors flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete
+              </button>
+              <div className="relative group">
+                <button className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm font-medium transition-colors">
+                  More Actions
+                </button>
+                <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                  <div className="p-2">
+                    <div className="text-xs text-slate-500 px-3 py-2 font-medium">Change Priority</div>
+                    {['high', 'medium', 'low'].map(priority => (
+                      <button
+                        key={priority}
+                        onClick={() => {
+                          setTasks(tasks.map(t => 
+                            selectedTasks.includes(t.id) ? { ...t, priority, updatedAt: new Date().toISOString() } : t
+                          ))
+                          showSuccess(`Updated ${selectedTasks.length} tasks to ${priority} priority`)
+                          setSelectedTasks([])
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded text-white text-sm transition-colors"
+                      >
+                        {priority === 'high' && '🔴'} {priority === 'medium' && '🟡'} {priority === 'low' && '⚪'} {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                      </button>
+                    ))}
+                    <div className="border-t border-slate-700 my-2"></div>
+                    <div className="text-xs text-slate-500 px-3 py-2 font-medium">Change Category</div>
+                    {categories.map(cat => (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          setTasks(tasks.map(t => 
+                            selectedTasks.includes(t.id) ? { ...t, category: cat.id, updatedAt: new Date().toISOString() } : t
+                          ))
+                          showSuccess(`Updated ${selectedTasks.length} tasks to ${cat.label}`)
+                          setSelectedTasks([])
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded text-white text-sm transition-colors"
+                      >
+                        {cat.icon} {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sort Bar */}
       <div className="flex items-center gap-2 mb-4">
@@ -400,9 +658,22 @@ const TasksView = ({
                       : overdue
                       ? 'border-red-600/50 bg-red-900/10'
                       : 'border-slate-800 hover:border-slate-700'
-                  }`}
+                  } ${selectedTasks.includes(task.id) ? 'ring-2 ring-blue-500' : ''}`}
                 >
                   <div className="flex items-start gap-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedTasks.includes(task.id)}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        if (e.target.checked) {
+                          setSelectedTasks([...selectedTasks, task.id])
+                        } else {
+                          setSelectedTasks(selectedTasks.filter(id => id !== task.id))
+                        }
+                      }}
+                      className="mt-1 w-5 h-5 bg-slate-800 border-slate-600 rounded text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                    />
                     <button
                       onClick={() => handleToggleComplete(task.id)}
                       className={`mt-1 w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
@@ -452,6 +723,42 @@ const TasksView = ({
                         <p className="text-slate-400 text-sm mb-3">{task.description}</p>
                       )}
 
+                      {/* Linked Items */}
+                      {(task.linkedOrderId || task.linkedClientId) && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {task.linkedOrderId && (() => {
+                            const linkedOrder = orders?.find(o => o.id === task.linkedOrderId)
+                            if (!linkedOrder) return null
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (openOrderDetailModal) openOrderDetailModal(linkedOrder)
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-xs transition-colors"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>{linkedOrder.orderNumber}</span>
+                              </button>
+                            )
+                          })()}
+                          {task.linkedClientId && (() => {
+                            const linkedClient = clients?.find(c => c.id === task.linkedClientId)
+                            if (!linkedClient) return null
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/20 text-purple-400 rounded text-xs">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                <span>{linkedClient.name}</span>
+                              </span>
+                            )
+                          })()}
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-4 text-xs text-slate-500">
                         {task.dueDate && (
                           <span className={overdue ? 'text-red-400 font-medium' : ''}>
@@ -494,6 +801,85 @@ const TasksView = ({
           </div>
         )}
       </div>
+
+      {/* Save View Modal */}
+      {showSaveViewModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowSaveViewModal(false)}
+        >
+          <div 
+            className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4 border border-slate-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Save Current View</h3>
+              <button
+                onClick={() => setShowSaveViewModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  View Name
+                </label>
+                <input
+                  type="text"
+                  value={newViewName}
+                  onChange={(e) => setNewViewName(e.target.value)}
+                  placeholder="e.g., High Priority Sales Tasks"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newViewName.trim()) {
+                      saveCurrentView()
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="bg-slate-900 rounded-lg p-4 space-y-2">
+                <div className="text-sm font-medium text-slate-300 mb-2">This view will save:</div>
+                <div className="text-sm text-slate-400 space-y-1">
+                  {statusFilter !== 'all' && <div>• Status: <span className="text-white">{statusFilter}</span></div>}
+                  {categoryFilter !== 'all' && <div>• Category: <span className="text-white">{categoryFilter}</span></div>}
+                  {priorityFilter !== 'all' && <div>• Priority: <span className="text-white">{priorityFilter}</span></div>}
+                  {searchQuery && <div>• Search: <span className="text-white">"{searchQuery}"</span></div>}
+                  <div>• Sort: <span className="text-white">{sortBy} ({sortDirection})</span></div>
+                  {!statusFilter && !categoryFilter && !priorityFilter && !searchQuery && (
+                    <div className="text-slate-500 italic">No active filters</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={saveCurrentView}
+                  disabled={!newViewName.trim()}
+                  className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                >
+                  Save View
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSaveViewModal(false)
+                    setNewViewName('')
+                  }}
+                  className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

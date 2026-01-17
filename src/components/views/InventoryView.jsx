@@ -1,10 +1,13 @@
 import React from 'react'
 
 const InventoryView = ({ 
-  inventory, 
+  inventory,
+  clients,
+  orders,
   setModalType, 
   setFormData, 
-  setShowModal
+  setShowModal,
+  openOrderDetailModal
 }) => {
   return (
     <div>

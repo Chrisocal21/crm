@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { formatMoney, getDueDateStatus } from '../../utils/helpers'
 import CONFIG from '../../config/business-config'
 
@@ -16,9 +17,63 @@ const DashboardView = ({
   stats, 
   orders, 
   clients, 
+  tasks,
   openNewOrderModal, 
   openOrderDetailModal 
 }) => {
+  // Widget configuration state
+  const [widgetConfig, setWidgetConfig] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_dashboard_widgets')
+    return saved ? JSON.parse(saved) : {
+      stats: { enabled: true, order: 1 },
+      shippingAlerts: { enabled: true, order: 2 },
+      recentOrders: { enabled: true, order: 3 },
+      upcomingTasks: { enabled: true, order: 4 },
+      clientActivity: { enabled: true, order: 5 },
+    }
+  })
+
+  const [showWidgetSettings, setShowWidgetSettings] = useState(false)
+
+  // Persist widget configuration
+  useEffect(() => {
+    localStorage.setItem('anchor_crm_dashboard_widgets', JSON.stringify(widgetConfig))
+  }, [widgetConfig])
+
+  const toggleWidget = (widgetId) => {
+    setWidgetConfig(prev => ({
+      ...prev,
+      [widgetId]: {
+        ...prev[widgetId],
+        enabled: !prev[widgetId].enabled
+      }
+    }))
+  }
+
+  const reorderWidget = (widgetId, direction) => {
+    const widgets = Object.entries(widgetConfig)
+      .sort(([, a], [, b]) => a.order - b.order)
+    
+    const currentIndex = widgets.findIndex(([id]) => id === widgetId)
+    if (
+      (direction === 'up' && currentIndex === 0) ||
+      (direction === 'down' && currentIndex === widgets.length - 1)
+    ) {
+      return
+    }
+
+    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    const temp = widgets[currentIndex]
+    widgets[currentIndex] = widgets[newIndex]
+    widgets[newIndex] = temp
+
+    const newConfig = {}
+    widgets.forEach(([id, config], index) => {
+      newConfig[id] = { ...config, order: index + 1 }
+    })
+    setWidgetConfig(newConfig)
+  }
+
   // Calculate shipping alerts
   const shippingAlerts = orders.reduce((alerts, order) => {
     const today = new Date()
@@ -63,31 +118,61 @@ const DashboardView = ({
   const totalAlerts = shippingAlerts.shipOverdue.length + shippingAlerts.shipToday.length + 
                       shippingAlerts.shipSoon.length + shippingAlerts.deliveryOverdue.length + 
                       shippingAlerts.noTracking.length
-  
-  return (
-    <div>
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 lg:p-6">
-          <div className="text-slate-400 text-sm mb-2">Total Orders</div>
-          <div className="text-xl font-bold whitespace-nowrap overflow-hidden text-ellipsis">{stats.total || 0}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <div className="text-slate-400 text-sm mb-2">Active Orders</div>
-          <div className="text-xl font-bold text-blue-400 whitespace-nowrap overflow-hidden text-ellipsis">{stats.active || 0}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <div className="text-slate-400 text-sm mb-2">Total Revenue</div>
-          <div className="text-xl font-bold text-green-400 whitespace-nowrap overflow-hidden text-ellipsis">{formatMoney(stats.totalRevenue || 0)}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <div className="text-slate-400 text-sm mb-2">Outstanding</div>
-          <div className="text-xl font-bold text-yellow-400 whitespace-nowrap overflow-hidden text-ellipsis">{formatMoney(stats.outstandingBalance || 0)}</div>
-        </div>
-      </div>
 
-      {/* Shipping Alerts Widget */}
-      {totalAlerts > 0 && (
+  // Get upcoming tasks
+  const upcomingTasks = tasks?.filter(task => {
+    if (task.status === 'completed') return false
+    if (!task.dueDate) return false
+    const dueDate = new Date(task.dueDate)
+    const today = new Date()
+    const daysDiff = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24))
+    return daysDiff >= 0 && daysDiff <= 7
+  }).slice(0, 5) || []
+
+  // Get active clients (with recent orders)
+  const recentClientIds = [...new Set(orders.slice(0, 10).map(o => o.clientId))]
+  const activeClients = clients?.filter(c => recentClientIds.includes(c.id)).slice(0, 5) || []
+
+  // Define widget components
+  const widgets = {
+    stats: {
+      id: 'stats',
+      title: 'Overview Stats',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      ),
+      component: (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 lg:p-6">
+            <div className="text-slate-400 text-sm mb-2">Total Orders</div>
+            <div className="text-xl font-bold whitespace-nowrap overflow-hidden text-ellipsis">{stats.total || 0}</div>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="text-slate-400 text-sm mb-2">Active Orders</div>
+            <div className="text-xl font-bold text-blue-400 whitespace-nowrap overflow-hidden text-ellipsis">{stats.active || 0}</div>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="text-slate-400 text-sm mb-2">Total Revenue</div>
+            <div className="text-xl font-bold text-green-400 whitespace-nowrap overflow-hidden text-ellipsis">{formatMoney(stats.totalRevenue || 0)}</div>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="text-slate-400 text-sm mb-2">Outstanding</div>
+            <div className="text-xl font-bold text-yellow-400 whitespace-nowrap overflow-hidden text-ellipsis">{formatMoney(stats.outstandingBalance || 0)}</div>
+          </div>
+        </div>
+      )
+    },
+    shippingAlerts: {
+      id: 'shippingAlerts',
+      title: 'Shipping Alerts',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      ),
+      component: totalAlerts > 0 && (
         <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
@@ -228,12 +313,19 @@ const DashboardView = ({
             )}
           </div>
         </div>
-      )}
-
-      {/* Recent Orders Preview */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h2 className="text-2xl font-bold mb-6 text-white">Recent Orders</h2>
-        {orders.length === 0 ? (
+      )
+    },
+    recentOrders: {
+      id: 'recentOrders',
+      title: 'Recent Orders',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+      component: (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          {orders.length === 0 ? (
           <div className="text-center py-12">
             <svg className="w-16 h-16 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -318,7 +410,214 @@ const DashboardView = ({
           })}
           </div>
         )}
+        </div>
+      )
+    },
+    upcomingTasks: {
+      id: 'upcomingTasks',
+      title: 'Upcoming Tasks',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+      ),
+      component: (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          {upcomingTasks.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              No upcoming tasks in the next 7 days
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {upcomingTasks.map(task => {
+                const dueDate = new Date(task.dueDate)
+                const today = new Date()
+                const daysDiff = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24))
+                const priorityColors = {
+                  high: 'text-red-400 bg-red-500/20',
+                  medium: 'text-yellow-400 bg-yellow-500/20',
+                  low: 'text-blue-400 bg-blue-500/20'
+                }
+                
+                return (
+                  <div key={task.id} className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="font-medium text-white mb-1">{task.title}</div>
+                        <div className="text-sm text-slate-400">
+                          {daysDiff === 0 ? 'Due today' : `Due in ${daysDiff} day${daysDiff > 1 ? 's' : ''}`}
+                        </div>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${priorityColors[task.priority] || priorityColors.low}`}>
+                        {task.priority}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )
+    },
+    clientActivity: {
+      id: 'clientActivity',
+      title: 'Active Clients',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+      ),
+      component: (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          {activeClients.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              No recent client activity
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activeClients.map(client => {
+                const clientOrders = orders.filter(o => o.clientId === client.id)
+                const totalSpent = clientOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
+                
+                return (
+                  <div key={client.id} className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-white">{client.name}</div>
+                        <div className="text-sm text-slate-400">
+                          {clientOrders.length} order{clientOrders.length !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-green-400">{formatMoney(totalSpent)}</div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )
+    }
+  }
+
+  // Get sorted widgets
+  const sortedWidgets = Object.values(widgets)
+    .filter(widget => widgetConfig[widget.id]?.enabled)
+    .sort((a, b) => (widgetConfig[a.id]?.order || 999) - (widgetConfig[b.id]?.order || 999))
+
+  return (
+    <div>
+      {/* Header with widget settings button */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+        <button
+          onClick={() => setShowWidgetSettings(true)}
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white font-medium transition-colors flex items-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Customize Widgets
+        </button>
       </div>
+
+      {/* Render widgets */}
+      <div className="space-y-6">
+        {sortedWidgets.map(widget => (
+          <div key={widget.id}>
+            {widget.component}
+          </div>
+        ))}
+      </div>
+
+      {/* Widget Settings Modal */}
+      {showWidgetSettings && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowWidgetSettings(false)}
+        >
+          <div 
+            className="bg-slate-800 rounded-xl p-6 max-w-2xl w-full mx-4 border border-slate-700 max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-semibold text-white">Customize Dashboard</h3>
+              <button
+                onClick={() => setShowWidgetSettings(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {Object.values(widgets).sort((a, b) => 
+                (widgetConfig[a.id]?.order || 999) - (widgetConfig[b.id]?.order || 999)
+              ).map(widget => (
+                <div 
+                  key={widget.id}
+                  className="bg-slate-900 rounded-lg p-4 flex items-center gap-4"
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <button
+                      onClick={() => toggleWidget(widget.id)}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        widgetConfig[widget.id]?.enabled
+                          ? 'bg-blue-600 border-blue-600'
+                          : 'border-slate-600 hover:border-slate-500'
+                      }`}
+                    >
+                      {widgetConfig[widget.id]?.enabled && (
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    <div className="text-slate-400">{widget.icon}</div>
+                    <span className="font-medium text-white">{widget.title}</span>
+                  </div>
+                  
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => reorderWidget(widget.id, 'up')}
+                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+                      title="Move up"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => reorderWidget(widget.id, 'down')}
+                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+                      title="Move down"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowWidgetSettings(false)}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

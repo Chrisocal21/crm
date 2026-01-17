@@ -3,9 +3,12 @@ import { useState, useEffect, useRef } from 'react'
 const ExpensesView = ({ 
   expenses, 
   setExpenses,
+  clients,
+  orders,
   setModalType, 
   setFormData, 
   setShowModal,
+  openOrderDetailModal,
   showConfirm,
   showSuccess
 }) => {
@@ -206,18 +209,6 @@ const ExpensesView = ({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="bg-blue-600/10 border border-blue-600/30 rounded-xl p-3 mb-3">
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-4">
-            <span className="text-blue-400 font-medium">Keyboard Shortcuts:</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">N</kbd> New Expense</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">/</kbd> Search</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">F</kbd> Filters</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">Esc</kbd> Clear</span>
-          </div>
-        </div>
-      </div>
-
       <div className="flex flex-wrap gap-2 mb-3">
         <div className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 flex items-center gap-2">
           <div className="text-slate-500 text-xs">Total Expenses</div>
@@ -390,6 +381,28 @@ const ExpensesView = ({
                       {expense.notes && (
                         <p className="text-sm text-slate-500">{expense.notes}</p>
                       )}
+
+                      {/* Linked Items */}
+                      {expense.linkedOrderId && (() => {
+                        const linkedOrder = orders?.find(o => o.id === expense.linkedOrderId)
+                        if (!linkedOrder) return null
+                        return (
+                          <div className="mt-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (openOrderDetailModal) openOrderDetailModal(linkedOrder)
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-xs transition-colors"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <span>Linked to {linkedOrder.orderNumber}</span>
+                            </button>
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     <div className="flex items-start gap-4 ml-4">

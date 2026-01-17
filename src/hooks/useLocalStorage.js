@@ -8,6 +8,7 @@ export const useLocalStorage = () => {
     SETTINGS: 'anchor_crm_settings',
     INVENTORY: 'anchor_crm_inventory',
     CUSTOM_CONFIG: 'anchor_crm_custom_config',
+    QUOTES: 'anchor_crm_quotes',
     BIDS: 'anchor_crm_bids',
     TASKS: 'anchor_crm_tasks',
     NOTES: 'anchor_crm_notes',
@@ -1522,6 +1523,7 @@ export const useLocalStorage = () => {
     return {
       orders: getAll(KEYS.ORDERS),
       clients: getAll(KEYS.CLIENTS),
+      quotes: getAll(KEYS.QUOTES),
       inventory: getAll(KEYS.INVENTORY),
       bids: getAll(KEYS.BIDS),
       tasks: getAll(KEYS.TASKS),
@@ -1542,6 +1544,7 @@ export const useLocalStorage = () => {
     try {
       if (data.orders) localStorage.setItem(KEYS.ORDERS, JSON.stringify(data.orders));
       if (data.clients) localStorage.setItem(KEYS.CLIENTS, JSON.stringify(data.clients));
+      if (data.quotes) localStorage.setItem(KEYS.QUOTES, JSON.stringify(data.quotes));
       if (data.inventory) localStorage.setItem(KEYS.INVENTORY, JSON.stringify(data.inventory));
       if (data.bids) localStorage.setItem(KEYS.BIDS, JSON.stringify(data.bids));
       if (data.tasks) localStorage.setItem(KEYS.TASKS, JSON.stringify(data.tasks));
@@ -1592,6 +1595,11 @@ export const useLocalStorage = () => {
     initializeData,
     orders,
     clients,
+    quotes: {
+      getAll: () => getAll(KEYS.QUOTES),
+      save: (quote) => save(KEYS.QUOTES, quote),
+      delete: (id) => deleteItem(KEYS.QUOTES, id)
+    },
     inventory,
     bids,
     tasks,

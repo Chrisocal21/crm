@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { formatMoney } from '../../utils/helpers'
 import { CONFIG } from '../../config/business-config'
 
@@ -14,6 +15,74 @@ const Icon = ({ icon, className = "" }) => {
 }
 
 export default function AnalyticsView({ orders, clients, revenuePeriod, setRevenuePeriod }) {
+  const [comparisonPeriod, setComparisonPeriod] = useState('month') // month, quarter, year
+  
+  // Calculate growth metrics
+  const calculateGrowthMetrics = () => {
+    const now = new Date()
+    let currentStart, currentEnd, previousStart, previousEnd
+    
+    if (comparisonPeriod === 'month') {
+      // Current month
+      currentStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      currentEnd = now
+      // Previous month
+      previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      previousEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+    } else if (comparisonPeriod === 'quarter') {
+      // Current quarter
+      const currentQuarter = Math.floor(now.getMonth() / 3)
+      currentStart = new Date(now.getFullYear(), currentQuarter * 3, 1)
+      currentEnd = now
+      // Previous quarter
+      previousStart = new Date(now.getFullYear(), (currentQuarter - 1) * 3, 1)
+      previousEnd = new Date(now.getFullYear(), currentQuarter * 3, 0)
+    } else {
+      // Current year
+      currentStart = new Date(now.getFullYear(), 0, 1)
+      currentEnd = now
+      // Previous year
+      previousStart = new Date(now.getFullYear() - 1, 0, 1)
+      previousEnd = new Date(now.getFullYear() - 1, 11, 31)
+    }
+    
+    const currentOrders = orders.filter(o => {
+      const orderDate = new Date(o.createdAt)
+      return orderDate >= currentStart && orderDate <= currentEnd
+    })
+    
+    const previousOrders = orders.filter(o => {
+      const orderDate = new Date(o.createdAt)
+      return orderDate >= previousStart && orderDate <= previousEnd
+    })
+    
+    const currentRevenue = currentOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
+    const previousRevenue = previousOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
+    const revenueGrowth = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0
+    
+    const currentOrderCount = currentOrders.length
+    const previousOrderCount = previousOrders.length
+    const orderGrowth = previousOrderCount > 0 ? ((currentOrderCount - previousOrderCount) / previousOrderCount) * 100 : 0
+    
+    const currentAvg = currentOrderCount > 0 ? currentRevenue / currentOrderCount : 0
+    const previousAvg = previousOrderCount > 0 ? previousRevenue / previousOrderCount : 0
+    const avgGrowth = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0
+    
+    return {
+      currentRevenue,
+      previousRevenue,
+      revenueGrowth,
+      currentOrderCount,
+      previousOrderCount,
+      orderGrowth,
+      currentAvg,
+      previousAvg,
+      avgGrowth
+    }
+  }
+  
+  const metrics = calculateGrowthMetrics()
+  
   return (
     <div className="space-y-6">
       {/* Analytics Header */}
@@ -76,6 +145,123 @@ export default function AnalyticsView({ orders, clients, revenuePeriod, setReven
             {formatMoney(orders.length > 0 ? orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0) / orders.length : 0)}
           </div>
           <div className="text-purple-100 text-sm">Avg Order Value</div>
+        </div>
+      </div>
+
+      {/* Growth Metrics */}
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-lg font-bold text-white">Growth Metrics</h3>
+          <div className="flex space-x-2">
+            {['month', 'quarter', 'year'].map(period => (
+              <button
+                key={period}
+                onClick={() => setComparisonPeriod(period)}
+                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                  comparisonPeriod === period
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                {period === 'month' ? 'This Month' : period === 'quarter' ? 'This Quarter' : 'This Year'}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Revenue Growth */}
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-slate-300 text-sm">Revenue Growth</span>
+              <div className={`flex items-center gap-1 text-xs font-bold ${
+                metrics.revenueGrowth >= 0 ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {metrics.revenueGrowth >= 0 ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                )}
+                {Math.abs(metrics.revenueGrowth).toFixed(1)}%
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-500">Current</span>
+                <span className="text-sm font-bold text-white">{formatMoney(metrics.currentRevenue)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-500">Previous</span>
+                <span className="text-sm text-slate-400">{formatMoney(metrics.previousRevenue)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Order Growth */}
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-slate-300 text-sm">Order Growth</span>
+              <div className={`flex items-center gap-1 text-xs font-bold ${
+                metrics.orderGrowth >= 0 ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {metrics.orderGrowth >= 0 ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                )}
+                {Math.abs(metrics.orderGrowth).toFixed(1)}%
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-500">Current</span>
+                <span className="text-sm font-bold text-white">{metrics.currentOrderCount} orders</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-500">Previous</span>
+                <span className="text-sm text-slate-400">{metrics.previousOrderCount} orders</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Avg Order Value Growth */}
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-slate-300 text-sm">Avg Order Value</span>
+              <div className={`flex items-center gap-1 text-xs font-bold ${
+                metrics.avgGrowth >= 0 ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {metrics.avgGrowth >= 0 ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                )}
+                {Math.abs(metrics.avgGrowth).toFixed(1)}%
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-500">Current</span>
+                <span className="text-sm font-bold text-white">{formatMoney(metrics.currentAvg)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-500">Previous</span>
+                <span className="text-sm text-slate-400">{formatMoney(metrics.previousAvg)}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

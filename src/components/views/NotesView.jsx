@@ -1,11 +1,24 @@
 import { useState, useEffect, useRef } from 'react'
+import { marked } from 'marked'
+import { exportNoteAsMarkdown, exportNoteAsPDF, exportMultipleNotesAsMarkdown, exportMultipleNotesAsPDF } from '../../utils/noteExporter'
+
+// Configure marked
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+  headerIds: false,
+  mangle: false
+})
 
 const NotesView = ({ 
   notes, 
   setNotes,
+  clients,
+  orders,
   setModalType, 
   setFormData, 
   setShowModal,
+  openOrderDetailModal,
   showConfirm,
   showSuccess
 }) => {
@@ -15,6 +28,7 @@ const NotesView = ({
   const [sortBy, setSortBy] = useState('updated')
   const [sortDirection, setSortDirection] = useState('desc')
   const [viewMode, setViewMode] = useState('grid')
+  const [selectedNote, setSelectedNote] = useState(null)
   const searchInputRef = useRef(null)
 
   useEffect(() => {
@@ -155,18 +169,6 @@ const NotesView = ({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="bg-blue-600/10 border border-blue-600/30 rounded-xl p-3 mb-4">
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-4">
-            <span className="text-blue-400 font-medium">Keyboard Shortcuts:</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">N</kbd> New Note</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">/</kbd> Search</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">F</kbd> Filters</span>
-            <span className="text-slate-400"><kbd className="px-2 py-1 bg-slate-800 rounded text-xs">Esc</kbd> Clear</span>
-          </div>
-        </div>
-      </div>
-
       <div className="flex flex-wrap gap-2 mb-3">
         <div className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 flex items-center gap-2">
           <div className="text-slate-500 text-xs">Total</div>
@@ -219,6 +221,55 @@ const NotesView = ({
             </svg>
             New Note
           </button>
+
+          {/* Export Dropdown */}
+          <div className="relative group">
+            <button
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div className="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <div className="p-2">
+                <button
+                  onClick={() => {
+                    exportMultipleNotesAsMarkdown(sortedNotes)
+                    showSuccess(`Exported ${sortedNotes.length} notes as Markdown`)
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded flex items-center gap-2 text-slate-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <div>
+                    <div className="text-sm font-medium">Export All as Markdown</div>
+                    <div className="text-xs text-slate-500">{sortedNotes.length} notes</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    exportMultipleNotesAsPDF(sortedNotes)
+                    showSuccess(`Exported ${sortedNotes.length} notes as PDF`)
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded flex items-center gap-2 text-slate-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <div>
+                    <div className="text-sm font-medium">Export All as PDF</div>
+                    <div className="text-xs text-slate-500">{sortedNotes.length} notes</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
 
           <button
             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
@@ -349,7 +400,7 @@ const NotesView = ({
                   className={`bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-slate-700 transition-all cursor-pointer relative ${
                     note.isPinned ? 'ring-2 ring-amber-600/50' : ''
                   }`}
-                  onClick={() => handleEditNote(note)}
+                  onClick={() => setSelectedNote(note)}
                 >
                   {note.isPinned && (
                     <div className="absolute top-2 right-2">
@@ -377,6 +428,42 @@ const NotesView = ({
                   <p className="text-slate-400 text-sm mb-3 line-clamp-3">
                     {truncateContent(note.content)}
                   </p>
+
+                  {/* Linked Items */}
+                  {(note.linkedOrderId || note.linkedClientId) && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {note.linkedOrderId && (() => {
+                        const linkedOrder = orders?.find(o => o.id === note.linkedOrderId)
+                        if (!linkedOrder) return null
+                        return (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (openOrderDetailModal) openOrderDetailModal(linkedOrder)
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-xs transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span>{linkedOrder.orderNumber}</span>
+                          </button>
+                        )
+                      })()}
+                      {note.linkedClientId && (() => {
+                        const linkedClient = clients?.find(c => c.id === note.linkedClientId)
+                        if (!linkedClient) return null
+                        return (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/20 text-purple-400 rounded text-xs">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            <span>{linkedClient.name}</span>
+                          </span>
+                        )
+                      })()}
+                    </div>
+                  )}
 
                   {note.tags && note.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-3">
@@ -434,6 +521,173 @@ const NotesView = ({
           </div>
         )}
       </div>
+
+      {/* Note Detail Modal */}
+      {selectedNote && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedNote(null)}>
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 border-b border-slate-800 flex justify-between items-start flex-shrink-0">
+              <div className="flex-1 pr-4">
+                <div className="flex items-center gap-2 mb-2">
+                  {(() => {
+                    const category = getCategoryInfo(selectedNote.category)
+                    return (
+                      <span
+                        className="px-2 py-1 rounded text-xs font-medium"
+                        style={{
+                          backgroundColor: category.color + '20',
+                          color: category.color,
+                          border: `1px solid ${category.color}40`
+                        }}
+                      >
+                        {category.icon} {category.label}
+                      </span>
+                    )
+                  })()}
+                  {selectedNote.isPinned && (
+                    <span className="text-amber-400 text-sm" title="Pinned">📌 Pinned</span>
+                  )}
+                </div>
+                <h2 className="text-2xl font-bold text-white">{selectedNote.title || 'Untitled Note'}</h2>
+                {(selectedNote.linkedOrderId || selectedNote.linkedClientId) && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {selectedNote.linkedOrderId && (() => {
+                      const linkedOrder = orders?.find(o => o.id === selectedNote.linkedOrderId)
+                      if (!linkedOrder) return null
+                      return (
+                        <button
+                          onClick={() => {
+                            if (openOrderDetailModal) {
+                              openOrderDetailModal(linkedOrder)
+                              setSelectedNote(null)
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-sm transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>{linkedOrder.orderNumber}</span>
+                        </button>
+                      )
+                    })()}
+                    {selectedNote.linkedClientId && (() => {
+                      const linkedClient = clients?.find(c => c.id === selectedNote.linkedClientId)
+                      if (!linkedClient) return null
+                      return (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/20 text-purple-400 rounded text-sm">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span>{linkedClient.name}</span>
+                        </span>
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative group">
+                  <button
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                    title="Export"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </button>
+                  <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                    <div className="p-2">
+                      <button
+                        onClick={() => {
+                          exportNoteAsMarkdown(selectedNote)
+                          showSuccess('Note exported as Markdown')
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded flex items-center gap-2 text-slate-300 hover:text-white transition-colors text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        Export as Markdown
+                      </button>
+                      <button
+                        onClick={() => {
+                          exportNoteAsPDF(selectedNote)
+                          showSuccess('Note exported as PDF')
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded flex items-center gap-2 text-slate-300 hover:text-white transition-colors text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        Export as PDF
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    handleEditNote(selectedNote)
+                    setSelectedNote(null)
+                  }}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                  title="Edit"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setSelectedNote(null)}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content with markdown rendering */}
+            <div className="p-6 overflow-y-auto flex-1">
+              <div
+                className="prose prose-invert prose-slate max-w-none
+                  prose-headings:text-white prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl
+                  prose-p:text-slate-300 prose-p:leading-relaxed
+                  prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+                  prose-strong:text-white prose-strong:font-semibold
+                  prose-em:text-slate-200
+                  prose-code:text-pink-400 prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
+                  prose-pre:bg-slate-800 prose-pre:border prose-pre:border-slate-700 prose-pre:shadow-lg
+                  prose-blockquote:border-l-4 prose-blockquote:border-l-blue-500 prose-blockquote:text-slate-400 prose-blockquote:italic
+                  prose-ul:text-slate-300 prose-ol:text-slate-300
+                  prose-li:marker:text-blue-400
+                  prose-hr:border-slate-700
+                  prose-img:rounded-lg prose-img:shadow-lg"
+                dangerouslySetInnerHTML={{ __html: marked.parse(selectedNote.content || 'No content') }}
+              />
+            </div>
+
+            {/* Footer with metadata */}
+            <div className="p-6 border-t border-slate-800 flex items-center justify-between flex-shrink-0">
+              <div className="text-sm text-slate-500">
+                <div>Created: {new Date(selectedNote.createdAt).toLocaleString()}</div>
+                <div>Updated: {new Date(selectedNote.updatedAt).toLocaleString()}</div>
+              </div>
+              {selectedNote.tags && selectedNote.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {selectedNote.tags.map((tag, idx) => (
+                    <span key={idx} className="px-2 py-1 bg-slate-800 text-slate-400 rounded text-xs">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

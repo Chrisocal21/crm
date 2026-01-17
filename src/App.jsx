@@ -15,10 +15,14 @@ import NotesView from './components/views/NotesView'
 import BidsView from './components/views/BidsView'
 import InventoryView from './components/views/InventoryView'
 import EmailTemplatesView from './components/views/EmailTemplatesView'
+import ExpensesView from './components/views/ExpensesView'
 import TimesheetsView from './components/views/TimesheetsView'
 import TimelineView from './components/views/TimelineView'
+import QuotesView from './components/views/QuotesView'
 import SettingsView from './components/views/SettingsViewV2'
 import CommandPalette from './components/CommandPalette'
+import BookmarksPanel from './components/BookmarksPanel'
+import MarkdownEditor from './components/MarkdownEditor'
 import LandingPage from './components/LandingPage'
 import SignInView from './components/auth/SignInView'
 import SignUpView from './components/auth/SignUpView'
@@ -56,10 +60,16 @@ function App() {
   })
   const [orders, setOrders] = useState([])
   const [clients, setClients] = useState([])
+  const [quotes, setQuotes] = useState([])
   const [bids, setBids] = useState([])
   const [inventory, setInventory] = useState([])
   const [emailTemplates, setEmailTemplates] = useState([])
   const [notes, setNotes] = useState([])
+  const [expenses, setExpenses] = useState([])
+  const [bookmarks, setBookmarks] = useState(() => {
+    const saved = localStorage.getItem('anchor_crm_bookmarks')
+    return saved ? JSON.parse(saved) : []
+  })
   const [stats, setStats] = useState({})
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [showModal, setShowModal] = useState(false)
@@ -70,6 +80,8 @@ function App() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [storeFilter, setStoreFilter] = useState('all')
   const [ordersExpanded, setOrdersExpanded] = useState(true)
+  const [salesExpanded, setSalesExpanded] = useState(true)
+  const [showBookmarks, setShowBookmarks] = useState(false)
   const [activeOrderTab, setActiveOrderTab] = useState('details') // 'details', 'items', 'pricing', 'payments', 'notes'
   const [shippingTab, setShippingTab] = useState('dates') // 'dates', 'address', 'details'
   const [workflowExpanded, setWorkflowExpanded] = useState(true)
@@ -129,6 +141,12 @@ function App() {
     const saved = localStorage.getItem('anchor_crm_current_user')
     return saved ? JSON.parse(saved) : null
   })
+
+  // Save bookmarks to localStorage
+  useEffect(() => {
+    localStorage.setItem('anchor_crm_bookmarks', JSON.stringify(bookmarks))
+  }, [bookmarks])
+
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [showBulkShippingModal, setShowBulkShippingModal] = useState(false)
@@ -236,6 +254,13 @@ function App() {
     dataManager.activeTimers.save(activeTimers)
   }, [activeTimers])
 
+  // Save quotes to localStorage
+  useEffect(() => {
+    if (quotes.length > 0 || localStorage.getItem('anchor_crm_quotes')) {
+      localStorage.setItem('anchor_crm_quotes', JSON.stringify(quotes))
+    }
+  }, [quotes])
+
   // Note: Users are saved individually through dataManager when created/updated
   // No need for a general save useEffect
 
@@ -266,6 +291,7 @@ function App() {
   const loadData = () => {
     const allOrders = dataManager.orders.getAll()
     const allClients = dataManager.clients.getAll()
+    const allQuotes = dataManager.quotes?.getAll() || []
     const allInventory = dataManager.inventory.getAll()
     const allBids = dataManager.bids.getAll()
     const allTasks = dataManager.tasks.getAll()
@@ -297,6 +323,7 @@ function App() {
     
     setOrders(allOrders)
     setClients(allClients)
+    setQuotes(allQuotes)
     setInventory(allInventory)
     setBids(allBids)
     setTasks(allTasks)
@@ -337,7 +364,8 @@ function App() {
     { id: 'clients', icon: '👥', label: 'Clients' },
     { id: 'kanban', icon: '🎯', label: 'Kanban Board' },
     { id: 'analytics', icon: '📈', label: 'Analytics' },
-    { id: 'invoices', icon: '🧾', label: 'Invoices' }
+    { id: 'invoices', icon: '🧾', label: 'Invoices' },
+    { id: 'expenses', icon: '💰', label: 'Expenses' }
   ]
 
   // Modal handlers
@@ -1426,7 +1454,7 @@ function App() {
           </button>
           )}
           
-          {(workflowExpanded || sidebarCollapsed) && (
+          {workflowExpanded && !sidebarCollapsed && (
           <div className="space-y-1 mb-6">
             {/* Dashboard */}
             <button
@@ -1494,8 +1522,8 @@ function App() {
             </svg>
           </button>
           )}
-          
-          {(projectManagementExpanded || sidebarCollapsed) && (
+
+          {projectManagementExpanded && !sidebarCollapsed && (
           <div className="space-y-1 mb-6">
             {/* Kanban */}
             <button
@@ -1611,8 +1639,8 @@ function App() {
             </svg>
           </button>
           )}
-          
-          {(ordersExpanded || sidebarCollapsed) && (
+
+          {ordersExpanded && !sidebarCollapsed && (
           <div className="space-y-1 mb-6">
             {/* Orders with Dropdown */}
             <div>
@@ -1718,7 +1746,7 @@ function App() {
           </button>
           )}
           
-          {(clientsExpanded || sidebarCollapsed) && (
+          {clientsExpanded && !sidebarCollapsed && (
           <div className="space-y-1 mb-6">
             {/* Clients */}
             <button
@@ -1743,7 +1771,36 @@ function App() {
                 <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
               )}
             </button>
+          </div>
+          )}
 
+          {/* Sales Section */}
+          {!sidebarCollapsed && (
+            <button
+              onClick={() => setSalesExpanded(!salesExpanded)}
+              className="w-full flex items-center justify-between px-3 py-2.5 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-blue-400 transition-all rounded-lg hover:bg-slate-800/30 group"
+            >
+              <div className="flex items-center space-x-2">
+                <svg className="w-4 h-4 text-amber-400 group-hover:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Sales</span>
+              </div>
+              <svg 
+                className={`w-3.5 h-3.5 transition-transform ${
+                  salesExpanded ? 'rotate-180 text-blue-400' : 'text-slate-600'
+                }`}
+                fill="currentColor" 
+                viewBox="0 0 20 20"
+              >
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+            )}
+
+            {/* Sales Items */}
+            {salesExpanded && !sidebarCollapsed && (
+            <div>
             {/* Proposals */}
             <button
               onClick={() => {
@@ -1767,6 +1824,30 @@ function App() {
                 <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
               )}
             </button>
+
+            {/* Quotes/Estimates */}
+            <button
+              onClick={() => {
+                setCurrentView('quotes')
+                setActiveSubView('')
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'quotes'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Quotes" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'quotes' ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Quotes</span>
+              </div>
+              {currentView === 'quotes' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
           </div>
           )}
 
@@ -1786,8 +1867,8 @@ function App() {
             </svg>
           </button>
           )}
-          
-          {(financialExpanded || sidebarCollapsed) && (
+
+          {financialExpanded && !sidebarCollapsed && (
           <div className="space-y-1 mb-6">
             {/* Invoices */}
             <button
@@ -1836,6 +1917,30 @@ function App() {
                 <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
               )}
             </button>
+
+            {/* Expenses */}
+            <button
+              onClick={() => {
+                setCurrentView('expenses')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'expenses'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Expenses" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'expenses' ? 'text-white' : 'text-amber-400 group-hover:text-amber-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Expenses</span>
+              </div>
+              {currentView === 'expenses' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
           </div>
           )}
 
@@ -1855,8 +1960,8 @@ function App() {
             </svg>
           </button>
           )}
-          
-          {(operationsExpanded || sidebarCollapsed) && (
+
+          {operationsExpanded && !sidebarCollapsed && (
           <div className="space-y-1 mb-6">
             {/* Inventory */}
             <button
@@ -1901,7 +2006,7 @@ function App() {
           </button>
           )}
           
-          {(communicationsExpanded || sidebarCollapsed) && (
+          {communicationsExpanded && !sidebarCollapsed && (
           <div className="space-y-1 mb-6">
             {/* Notes */}
             <button
@@ -1954,28 +2059,70 @@ function App() {
           )}
         </nav>
 
+        {/* Bookmarks Panel (when expanded) */}
+        {!sidebarCollapsed && showBookmarks && (
+          <div className="px-3 mb-3">
+            <BookmarksPanel
+              bookmarks={bookmarks}
+              setBookmarks={setBookmarks}
+              orders={orders}
+              clients={clients}
+              notes={notes}
+              openOrderDetailModal={openOrderDetailModal}
+              setCurrentView={setCurrentView}
+              showSuccess={showSuccess}
+              showConfirm={showConfirm}
+            />
+          </div>
+        )}
+
         {/* Settings Section at Bottom */}
         <div className="p-3 border-t border-slate-800/50 space-y-2 bg-gradient-to-b from-transparent to-slate-950/50">
-          <button
-            onClick={() => {
-              setCurrentView('settings')
-              setMobileMenuOpen(false)
-            }}
-            className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
-              currentView === 'settings'
-                ? 'bg-gradient-to-r from-slate-700 to-slate-600 text-white shadow-lg shadow-slate-600/20'
-                : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
-            }`}
-            title={sidebarCollapsed ? "Settings" : ""}
-          >
-            <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
-              <svg className={`w-5 h-5 ${currentView === 'settings' ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Settings</span>
-            </div>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setCurrentView('settings')
+                setMobileMenuOpen(false)
+              }}
+              className={`flex-1 flex items-center ${
+                sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'
+              } py-2.5 rounded-xl transition-all group ${
+                currentView === 'settings'
+                  ? 'bg-gradient-to-r from-slate-700 to-slate-600 text-white shadow-lg shadow-slate-600/20'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Settings" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'settings' ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Settings</span>
+              </div>
+            </button>
+
+            {!sidebarCollapsed && (
+              <button
+                onClick={() => setShowBookmarks(!showBookmarks)}
+                className={`p-2.5 rounded-xl transition-all ${
+                  showBookmarks
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-white shadow-lg shadow-amber-600/30'
+                    : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-amber-400'
+                }`}
+                title="Bookmarks"
+              >
+                <svg className="w-5 h-5" fill={showBookmarks ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+                {bookmarks.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {bookmarks.length}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -2734,6 +2881,7 @@ function App() {
               stats={stats}
               orders={orders}
               clients={clients}
+              tasks={tasks}
               openNewOrderModal={openNewOrderModal}
               openOrderDetailModal={openOrderDetailModal}
             />
@@ -3021,6 +3169,18 @@ function App() {
             />
           )}
 
+          {/* Quotes View */}
+          {currentView === 'quotes' && (
+            <QuotesView
+              quotes={quotes}
+              setQuotes={setQuotes}
+              clients={clients}
+              showSuccess={showSuccess}
+              showConfirm={showConfirm}
+              openNewOrderModal={openNewOrderModal}
+            />
+          )}
+
           {/* Upgrade View */}
           {currentView === 'upgrade' && (
             <UpgradeView showInfo={showInfo} />
@@ -3053,9 +3213,12 @@ function App() {
           {currentView === 'inventory' && (
             <InventoryView
               inventory={inventory}
+              clients={clients}
+              orders={orders}
               setModalType={setModalType}
               setFormData={setFormData}
               setShowModal={setShowModal}
+              openOrderDetailModal={openOrderDetailModal}
             />
           )}
 
@@ -3110,6 +3273,7 @@ function App() {
               setModalType={setModalType}
               setFormData={setFormData}
               setShowModal={setShowModal}
+              openOrderDetailModal={openOrderDetailModal}
               showConfirm={showConfirm}
               showSuccess={showSuccess}
               dataManager={dataManager}
@@ -3129,6 +3293,22 @@ function App() {
               dataManager={dataManager}
               clients={clients}
               orders={orders}
+            />
+          )}
+
+          {/* Expenses View */}
+          {currentView === 'expenses' && (
+            <ExpensesView
+              expenses={expenses}
+              setExpenses={setExpenses}
+              clients={clients}
+              orders={orders}
+              setModalType={setModalType}
+              setFormData={setFormData}
+              setShowModal={setShowModal}
+              openOrderDetailModal={openOrderDetailModal}
+              showConfirm={showConfirm}
+              showSuccess={showSuccess}
             />
           )}
         </main>
@@ -8796,6 +8976,65 @@ function App() {
                 />
               </div>
 
+              {/* Recurring Task Options */}
+              <div className="border border-slate-700 rounded-lg p-4 bg-slate-800/30">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.isRecurring || false}
+                      onChange={(e) => setFormData({...formData, isRecurring: e.target.checked, recurringPattern: e.target.checked ? 'daily' : null})}
+                      className="w-4 h-4 bg-slate-700 border-slate-600 rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-slate-300">Recurring Task</span>
+                  </label>
+                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+                
+                {formData.isRecurring && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Frequency</label>
+                        <select
+                          value={formData.recurringPattern || 'daily'}
+                          onChange={(e) => setFormData({...formData, recurringPattern: e.target.value})}
+                          className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="biweekly">Bi-weekly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="quarterly">Quarterly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Generate</label>
+                        <select
+                          value={formData.recurringCount || '5'}
+                          onChange={(e) => setFormData({...formData, recurringCount: e.target.value})}
+                          className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                          <option value="3">3 tasks</option>
+                          <option value="5">5 tasks</option>
+                          <option value="10">10 tasks</option>
+                          <option value="20">20 tasks</option>
+                          <option value="30">30 tasks</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="bg-blue-600/10 border border-blue-600/30 rounded p-2">
+                      <p className="text-xs text-blue-400">
+                        <strong>Note:</strong> Will create {formData.recurringCount || '5'} tasks starting from {formData.dueDate ? new Date(formData.dueDate).toLocaleDateString() : 'the due date'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="border-t border-slate-700 pt-4">
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   <span className="flex items-center space-x-2">
@@ -8834,33 +9073,105 @@ function App() {
                     return
                   }
 
-                  const taskData = {
-                    id: formData.id || `task-${Date.now()}`,
+                  // Helper function to calculate next due date based on pattern
+                  const getNextDueDate = (currentDate, pattern) => {
+                    const date = new Date(currentDate)
+                    switch (pattern) {
+                      case 'daily':
+                        date.setDate(date.getDate() + 1)
+                        break
+                      case 'weekly':
+                        date.setDate(date.getDate() + 7)
+                        break
+                      case 'biweekly':
+                        date.setDate(date.getDate() + 14)
+                        break
+                      case 'monthly':
+                        date.setMonth(date.getMonth() + 1)
+                        break
+                      case 'quarterly':
+                        date.setMonth(date.getMonth() + 3)
+                        break
+                      case 'yearly':
+                        date.setFullYear(date.getFullYear() + 1)
+                        break
+                      default:
+                        date.setDate(date.getDate() + 1)
+                    }
+                    return date.toISOString().split('T')[0]
+                  }
+
+                  // Create the initial task data
+                  const baseTaskData = {
                     title: formData.title,
                     description: formData.description || '',
                     priority: formData.priority || 'medium',
                     category: formData.category || 'general',
-                    status: formData.status || 'pending',
-                    dueDate: formData.dueDate || null,
+                    status: 'pending',
                     linkedOrderId: formData.linkedOrderId || null,
-                    createdAt: formData.createdAt || new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                    linkedClientId: formData.linkedClientId || null
                   }
 
                   let updatedTasks
+
                   if (modalType === 'editTask') {
+                    // Editing existing task - don't create recurring series
+                    const taskData = {
+                      ...baseTaskData,
+                      id: formData.id,
+                      dueDate: formData.dueDate || null,
+                      status: formData.status || 'pending',
+                      createdAt: formData.createdAt,
+                      updatedAt: new Date().toISOString()
+                    }
                     updatedTasks = tasks.map(t => t.id === taskData.id ? taskData : t)
+                    showSuccess('Task updated successfully')
                   } else {
-                    updatedTasks = [...tasks, taskData]
+                    // Creating new task(s)
+                    const newTasks = []
+                    
+                    if (formData.isRecurring && formData.dueDate) {
+                      // Create recurring task series
+                      const count = parseInt(formData.recurringCount || '5')
+                      let currentDueDate = formData.dueDate
+                      
+                      for (let i = 0; i < count; i++) {
+                        newTasks.push({
+                          ...baseTaskData,
+                          id: `task-${Date.now()}-${i}`,
+                          dueDate: currentDueDate,
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                          recurringSeriesId: `series-${Date.now()}`, // Track recurring series
+                          recurringIndex: i + 1
+                        })
+                        currentDueDate = getNextDueDate(currentDueDate, formData.recurringPattern)
+                      }
+                      
+                      showSuccess(`Created ${count} recurring tasks successfully!`)
+                    } else {
+                      // Create single task
+                      newTasks.push({
+                        ...baseTaskData,
+                        id: `task-${Date.now()}`,
+                        dueDate: formData.dueDate || null,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                      })
+                      
+                      showSuccess('Task created successfully!')
+                    }
+                    
+                    updatedTasks = [...tasks, ...newTasks]
                   }
 
                   setTasks(updatedTasks)
                   localStorage.setItem('anchor_crm_tasks', JSON.stringify(updatedTasks))
                   closeModal()
                 }}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
               >
-                {modalType === 'editTask' ? 'Save Changes' : 'Create Task'}
+                {modalType === 'editTask' ? 'Update Task' : (formData.isRecurring ? `Create ${formData.recurringCount || '5'} Tasks` : 'Create Task')}
               </button>
             </div>
           </div>
@@ -8959,11 +9270,9 @@ function App() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Content *</label>
-                <textarea
+                <MarkdownEditor
                   value={formData.content || ''}
                   onChange={(e) => setFormData({...formData, content: e.target.value})}
-                  className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none font-mono text-sm"
-                  rows="12"
                   placeholder="Write your note here... (Markdown supported)"
                 />
               </div>
