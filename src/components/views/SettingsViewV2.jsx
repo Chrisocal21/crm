@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import LegalModal from '../modals/LegalModal'
 
 const SettingsViewV2 = ({
   CONFIG,
@@ -17,13 +18,23 @@ const SettingsViewV2 = ({
   showConfirm,
   showSuccess,
   loadSampleData,
-  clearAllData
+  clearAllData,
+  workflowEngine
 }) => {
   const [activeTab, setActiveTab] = useState('profile')
   const [profileSubTab, setProfileSubTab] = useState('personal')
   const [businessSubTab, setBusinessSubTab] = useState('company')
   const [preferencesSubTab, setPreferencesSubTab] = useState('appearance')
   const [catalogSubTab, setCatalogSubTab] = useState('kanban')
+  const [legalModal, setLegalModal] = useState({ isOpen: false, document: 'privacy' })
+
+  const openLegalModal = (doc) => {
+    setLegalModal({ isOpen: true, document: doc })
+  }
+
+  const closeLegalModal = () => {
+    setLegalModal({ isOpen: false, document: 'privacy' })
+  }
 
   const tabs = [
     { id: 'profile', label: 'My Profile', icon: '👤' },
@@ -31,7 +42,8 @@ const SettingsViewV2 = ({
     { id: 'preferences', label: 'Preferences', icon: '⚙️' },
     { id: 'users', label: 'Users', icon: '👥', adminOnly: true },
     { id: 'catalog', label: 'Catalog', icon: '📦', adminOnly: true },
-    { id: 'data', label: 'Data', icon: '💾', adminOnly: true }
+    { id: 'data', label: 'Data', icon: '💾', adminOnly: true },
+    { id: 'about', label: 'About & Legal', icon: 'ℹ️' }
   ]
 
   const visibleTabs = tabs.filter(tab => !tab.adminOnly || hasPermission('manageSettings'))
@@ -475,6 +487,16 @@ const SettingsViewV2 = ({
                 >
                   📧 Email
                 </button>
+                <button
+                  onClick={() => setPreferencesSubTab('workflows')}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    preferencesSubTab === 'workflows'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  🔄 Workflows
+                </button>
               </div>
             </div>
 
@@ -559,6 +581,101 @@ const SettingsViewV2 = ({
                   </div>
                   <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded" />
                 </label>
+              </div>
+            </div>
+            )}
+
+            {preferencesSubTab === 'workflows' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">🔄 Automated Workflows</h3>
+              <p className="text-slate-400 text-sm mb-6">
+                Workflows automatically trigger actions based on events in your CRM. 
+                Enable or disable workflows below.
+              </p>
+              <div className="space-y-3">
+                <label className="flex items-start justify-between p-4 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div className="flex-1">
+                    <div className="text-white text-sm font-medium flex items-center gap-2">
+                      ✅ Quote Accepted → Create Order
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Automatically creates an order when a quote is marked as accepted
+                    </div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded mt-1" />
+                </label>
+                
+                <label className="flex items-start justify-between p-4 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div className="flex-1">
+                    <div className="text-white text-sm font-medium flex items-center gap-2">
+                      ⏰ Invoice Overdue → Notify
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Sends notifications when invoices become overdue
+                    </div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded mt-1" />
+                </label>
+                
+                <label className="flex items-start justify-between p-4 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div className="flex-1">
+                    <div className="text-white text-sm font-medium flex items-center gap-2">
+                      🎉 Order Completed → Request Feedback
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Automatically requests client feedback when orders are completed
+                    </div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded mt-1" />
+                </label>
+                
+                <label className="flex items-start justify-between p-4 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div className="flex-1">
+                    <div className="text-white text-sm font-medium flex items-center gap-2">
+                      👋 New Client → Send Welcome
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Sends a welcome message when new clients are created
+                    </div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded mt-1" />
+                </label>
+                
+                <label className="flex items-start justify-between p-4 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div className="flex-1">
+                    <div className="text-white text-sm font-medium flex items-center gap-2">
+                      📋 Task Overdue → Remind
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Creates reminders for overdue tasks
+                    </div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded mt-1" />
+                </label>
+                
+                <label className="flex items-start justify-between p-4 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors">
+                  <div className="flex-1">
+                    <div className="text-white text-sm font-medium flex items-center gap-2">
+                      📦 Low Inventory → Alert
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Alerts when inventory items reach reorder point
+                    </div>
+                  </div>
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-blue-600 rounded mt-1" />
+                </label>
+              </div>
+              
+              <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">💡</span>
+                  <div>
+                    <div className="text-blue-300 text-sm font-medium">Pro Tip</div>
+                    <div className="text-blue-200/70 text-xs mt-1">
+                      Workflows run automatically in the background. Check the browser console to see workflow execution logs.
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             )}
@@ -1121,6 +1238,120 @@ const SettingsViewV2 = ({
           </>
         )}
 
+        {/* About & Legal Tab */}
+        {activeTab === 'about' && (
+          <>
+            <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700 mb-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center font-bold text-xl">
+                  ⚓
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">ANCHOR</h3>
+                  <p className="text-sm text-slate-400">by Probably Fine Studios • Version 1.0.0</p>
+                </div>
+              </div>
+              <p className="text-slate-300 mb-4">
+                A modern, lightweight CRM system built for every business. 100% browser-based with zero server costs.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="px-3 py-1 bg-blue-600/20 text-blue-300 rounded-full text-xs font-medium">
+                  React 18.2.0
+                </span>
+                <span className="px-3 py-1 bg-purple-600/20 text-purple-300 rounded-full text-xs font-medium">
+                  Vite 5.0.12
+                </span>
+                <span className="px-3 py-1 bg-cyan-600/20 text-cyan-300 rounded-full text-xs font-medium">
+                  Tailwind CSS
+                </span>
+                <span className="px-3 py-1 bg-green-600/20 text-green-300 rounded-full text-xs font-medium">
+                  localStorage
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700 mb-6">
+              <h3 className="text-lg font-bold text-white mb-4">📜 Legal Documents</h3>
+              <p className="text-slate-400 text-sm mb-4">
+                View our legal policies and license information
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => openLegalModal('privacy')}
+                  className="w-full flex items-center justify-between p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center">
+                      🔒
+                    </div>
+                    <div className="text-left">
+                      <div className="font-semibold text-white">Privacy Policy</div>
+                      <div className="text-xs text-slate-400">How we handle your data</div>
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={() => openLegalModal('terms')}
+                  className="w-full flex items-center justify-between p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-purple-600/20 rounded-lg flex items-center justify-center">
+                      📜
+                    </div>
+                    <div className="text-left">
+                      <div className="font-semibold text-white">Terms of Service</div>
+                      <div className="text-xs text-slate-400">Agreement and usage terms</div>
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={() => openLegalModal('license')}
+                  className="w-full flex items-center justify-between p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center">
+                      ⚖️
+                    </div>
+                    <div className="text-left">
+                      <div className="font-semibold text-white">MIT License</div>
+                      <div className="text-xs text-slate-400">Open source license information</div>
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700">
+              <h3 className="text-lg font-bold text-white mb-4">📞 Support</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center space-x-3 text-slate-300">
+                  <span className="text-blue-400">✉️</span>
+                  <span>Email: support@probablyfinestudios.com</span>
+                </div>
+                <div className="flex items-center space-x-3 text-slate-300">
+                  <span className="text-purple-400">💻</span>
+                  <span>GitHub: github.com/yourrepo/crm</span>
+                </div>
+                <div className="flex items-center space-x-3 text-slate-300">
+                  <span className="text-green-400">✅</span>
+                  <span>Status: All Systems Operational</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
         {/* Save Settings Button */}
         <div className="flex justify-end pt-2">
           <button
@@ -1136,6 +1367,13 @@ const SettingsViewV2 = ({
           </button>
         </div>
       </div>
+
+      {/* Legal Modal */}
+      <LegalModal
+        isOpen={legalModal.isOpen}
+        onClose={closeLegalModal}
+        document={legalModal.document}
+      />
     </div>
   )
 }

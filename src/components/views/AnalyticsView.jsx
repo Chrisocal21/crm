@@ -94,57 +94,65 @@ export default function AnalyticsView({ orders, clients, revenuePeriod, setReven
       </div>
 
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Total Revenue */}
-        <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-xl p-4 lg:p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+        <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-lg p-3 shadow-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1 bg-white/10 rounded">
+              <svg className="w-3.5 h-3.5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="text-xs text-green-100">Revenue</div>
           </div>
-          <div className="text-xl font-bold text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+          <div className="text-xl font-bold text-white">
             {formatMoney(orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0))}
           </div>
-          <div className="text-green-100 text-sm">Total Revenue</div>
         </div>
 
         {/* Paid Amount */}
-        <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+        <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg p-3 shadow-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1 bg-white/10 rounded">
+              <svg className="w-3.5 h-3.5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="text-xs text-blue-100">Collected</div>
           </div>
-          <div className="text-xl font-bold text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+          <div className="text-xl font-bold text-white">
             {formatMoney(orders.reduce((sum, o) => sum + (o.pricing?.paid || 0), 0))}
           </div>
-          <div className="text-blue-100 text-sm">Total Collected</div>
         </div>
 
         {/* Outstanding Balance */}
-        <div className="bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+        <div className="bg-gradient-to-br from-amber-600 to-amber-800 rounded-lg p-3 shadow-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1 bg-white/10 rounded">
+              <svg className="w-3.5 h-3.5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="text-xs text-amber-100">Outstanding</div>
           </div>
-          <div className="text-xl font-bold text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+          <div className="text-xl font-bold text-white">
             {formatMoney(orders.reduce((sum, o) => sum + (o.pricing?.balance || 0), 0))}
           </div>
-          <div className="text-amber-100 text-sm">Outstanding</div>
         </div>
 
         {/* Avg Order Value */}
-        <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-            </svg>
+        <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg p-3 shadow-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1 bg-white/10 rounded">
+              <svg className="w-3.5 h-3.5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+              </svg>
+            </div>
+            <div className="text-xs text-purple-100">Avg Order</div>
           </div>
-          <div className="text-xl font-bold text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+          <div className="text-xl font-bold text-white">
             {formatMoney(orders.length > 0 ? orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0) / orders.length : 0)}
           </div>
-          <div className="text-purple-100 text-sm">Avg Order Value</div>
         </div>
       </div>
 

@@ -12,7 +12,11 @@ export const useLocalStorage = () => {
     BIDS: 'anchor_crm_bids',
     TASKS: 'anchor_crm_tasks',
     NOTES: 'anchor_crm_notes',
+    MESSAGES: 'anchor_crm_messages',
+    TEAM_MESSAGES: 'anchor_crm_team_messages',
     EMAIL_TEMPLATES: 'anchor_crm_email_templates',
+    INVOICES: 'anchor_crm_invoices',
+    TIMESHEETS: 'anchor_crm_timesheets',
     USERS: 'anchor_crm_users',
     ACTIVE_TIMERS: 'anchor_crm_active_timers',
     CONNECTED_STORES: 'anchor_crm_connected_stores',
@@ -1524,6 +1528,8 @@ export const useLocalStorage = () => {
       orders: getAll(KEYS.ORDERS),
       clients: getAll(KEYS.CLIENTS),
       quotes: getAll(KEYS.QUOTES),
+      invoices: getAll(KEYS.INVOICES),
+      timesheets: getAll(KEYS.TIMESHEETS),
       inventory: getAll(KEYS.INVENTORY),
       bids: getAll(KEYS.BIDS),
       tasks: getAll(KEYS.TASKS),
@@ -1545,6 +1551,8 @@ export const useLocalStorage = () => {
       if (data.orders) localStorage.setItem(KEYS.ORDERS, JSON.stringify(data.orders));
       if (data.clients) localStorage.setItem(KEYS.CLIENTS, JSON.stringify(data.clients));
       if (data.quotes) localStorage.setItem(KEYS.QUOTES, JSON.stringify(data.quotes));
+      if (data.invoices) localStorage.setItem(KEYS.INVOICES, JSON.stringify(data.invoices));
+      if (data.timesheets) localStorage.setItem(KEYS.TIMESHEETS, JSON.stringify(data.timesheets));
       if (data.inventory) localStorage.setItem(KEYS.INVENTORY, JSON.stringify(data.inventory));
       if (data.bids) localStorage.setItem(KEYS.BIDS, JSON.stringify(data.bids));
       if (data.tasks) localStorage.setItem(KEYS.TASKS, JSON.stringify(data.tasks));
@@ -1600,10 +1608,30 @@ export const useLocalStorage = () => {
       save: (quote) => save(KEYS.QUOTES, quote),
       delete: (id) => deleteItem(KEYS.QUOTES, id)
     },
+    invoices: {
+      getAll: () => getAll(KEYS.INVOICES),
+      save: (invoice) => save(KEYS.INVOICES, invoice),
+      delete: (id) => deleteItem(KEYS.INVOICES, id)
+    },
+    timesheets: {
+      getAll: () => getAll(KEYS.TIMESHEETS),
+      save: (timesheet) => save(KEYS.TIMESHEETS, timesheet),
+      delete: (id) => deleteItem(KEYS.TIMESHEETS, id)
+    },
     inventory,
     bids,
     tasks,
     notes,
+    messages: {
+      getAll: () => getAll(KEYS.MESSAGES),
+      save: (message) => save(KEYS.MESSAGES, message),
+      delete: (id) => deleteItem(KEYS.MESSAGES, id)
+    },
+    teamMessages: {
+      getAll: () => getAll(KEYS.TEAM_MESSAGES),
+      save: (message) => save(KEYS.TEAM_MESSAGES, message),
+      delete: (id) => deleteItem(KEYS.TEAM_MESSAGES, id)
+    },
     emailTemplates,
     users,
     activeTimers,

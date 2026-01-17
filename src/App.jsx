@@ -3,6 +3,7 @@ import CONFIG from './config/business-config'
 import useLocalStorage from './hooks/useLocalStorage'
 import { formatMoney, formatDate, getDueDateStatus, calculateOrderPricing, addDays } from './utils/helpers'
 import { generateInvoicePDF, previewInvoice } from './utils/invoiceGenerator'
+import { WorkflowEngine, defaultWorkflows, triggerWorkflow } from './utils/workflows'
 import DashboardView from './components/views/DashboardView'
 import OrdersView from './components/views/OrdersView'
 import ClientsView from './components/views/ClientsView'
@@ -19,6 +20,7 @@ import ExpensesView from './components/views/ExpensesView'
 import TimesheetsView from './components/views/TimesheetsView'
 import TimelineView from './components/views/TimelineView'
 import QuotesView from './components/views/QuotesView'
+import ClientPortalView from './components/views/ClientPortalView'
 import SettingsView from './components/views/SettingsViewV2'
 import CommandPalette from './components/CommandPalette'
 import BookmarksPanel from './components/BookmarksPanel'
@@ -48,9 +50,13 @@ const Icon = ({ icon, className = "w-5 h-5" }) => {
 
 function App() {
   // State management - ALL hooks must be at top level
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('anchor_crm_current_user') !== null
+  })
   const [authView, setAuthView] = useState('landing') // 'landing', 'signin', 'signup'
-  const [currentView, setCurrentView] = useState('dashboard') // dashboard, orders, clients, analytics, invoices
+  const [currentView, setCurrentView] = useState(() => {
+    return localStorage.getItem('anchor_crm_current_view') || 'dashboard'
+  })
   const [authFormData, setAuthFormData] = useState({
     email: '',
     password: '',
@@ -63,14 +69,21 @@ function App() {
   const [quotes, setQuotes] = useState([])
   const [bids, setBids] = useState([])
   const [inventory, setInventory] = useState([])
+  const [invoices, setInvoices] = useState([])
+  const [timesheets, setTimesheets] = useState([])
   const [emailTemplates, setEmailTemplates] = useState([])
   const [notes, setNotes] = useState([])
+  const [messages, setMessages] = useState([])
+  const [teamMessages, setTeamMessages] = useState([])
   const [expenses, setExpenses] = useState([])
   const [bookmarks, setBookmarks] = useState(() => {
     const saved = localStorage.getItem('anchor_crm_bookmarks')
     return saved ? JSON.parse(saved) : []
   })
   const [stats, setStats] = useState({})
+  const [activeMessagesTab, setActiveMessagesTab] = useState('clients')
+  const [selectedTeamMember, setSelectedTeamMember] = useState(null)
+  const [sharedMessage, setSharedMessage] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -93,6 +106,11 @@ function App() {
   const [enabledStores, setEnabledStores] = useState(() => {
     const saved = localStorage.getItem('anchor_crm_enabled_stores')
     return saved ? JSON.parse(saved) : CONFIG.stores.filter(s => s.enabled).map(s => s.id)
+  })
+  const [workflowEngine] = useState(() => {
+    const engine = new WorkflowEngine()
+    defaultWorkflows.forEach(wf => engine.register(wf))
+    return engine
   })
   const [connectedStores, setConnectedStores] = useState(() => {
     const saved = localStorage.getItem('anchor_crm_connected_stores')
@@ -146,6 +164,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem('anchor_crm_bookmarks', JSON.stringify(bookmarks))
   }, [bookmarks])
+
+  // Save current view to localStorage
+  useEffect(() => {
+    localStorage.setItem('anchor_crm_current_view', currentView)
+  }, [currentView])
 
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
@@ -296,7 +319,11 @@ function App() {
     const allBids = dataManager.bids.getAll()
     const allTasks = dataManager.tasks.getAll()
     const allNotes = dataManager.notes.getAll()
+    const allMessages = dataManager.messages?.getAll() || []
+    const allTeamMessages = dataManager.teamMessages?.getAll() || []
     const allEmailTemplates = dataManager.emailTemplates.getAll()
+    const allInvoices = dataManager.invoices?.getAll() || []
+    const allTimesheets = dataManager.timesheets?.getAll() || []
     let allUsers = dataManager.users.getAll()
     
     // Ensure default admin user exists
@@ -328,7 +355,11 @@ function App() {
     setBids(allBids)
     setTasks(allTasks)
     setNotes(allNotes)
+    setMessages(allMessages)
+    setTeamMessages(allTeamMessages)
     setEmailTemplates(allEmailTemplates)
+    setInvoices(allInvoices)
+    setTimesheets(allTimesheets)
     setUsers(allUsers)
     setActiveTimers(allActiveTimers)
     setConnectedStores(allConnectedStores)
@@ -440,6 +471,12 @@ function App() {
     dataManager.clients.save(newClient)
     loadData()
     showSuccess('Client saved successfully')
+    
+    // Trigger workflow for new client
+    if (!formData.id && workflowEngine) {
+      triggerWorkflow(workflowEngine, 'client.created', newClient)
+    }
+    
     closeModal()
   }
 
@@ -1154,6 +1191,11 @@ function App() {
           updatedAt: new Date().toISOString()
         }
         dataManager.orders.save(updatedOrder)
+        
+        // Trigger workflow for completed orders
+        if (newStatus === 'completed' && workflowEngine) {
+          triggerWorkflow(workflowEngine, 'order.completed', updatedOrder)
+        }
       }
     })
     loadData()
@@ -1342,6 +1384,19 @@ function App() {
     })
   }
 
+  // Client Portal Page (separate from user auth)
+  if (!isLoggedIn && authView === 'clientPortal') {
+    return (
+      <ClientPortalView
+        clients={clients}
+        quotes={quotes}
+        invoices={invoices}
+        timesheets={timesheets}
+        orders={orders}
+      />
+    )
+  }
+
   // Sign In Page
   if (!isLoggedIn && authView === 'signin') {
     return (
@@ -1430,7 +1485,7 @@ function App() {
             </div>
             <div className={`${sidebarCollapsed ? 'lg:hidden' : ''}`}>
               <div className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">ANCHOR</div>
-              <div className="text-xs text-slate-400 font-medium">CRM Dashboard</div>
+              <div className="text-xs text-slate-400 font-medium">by Probably Fine Studios</div>
             </div>
           </div>
         </div>
@@ -1768,6 +1823,30 @@ function App() {
                 <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Clients</span>
               </div>
               {currentView === 'clients' && !sidebarCollapsed && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+              )}
+            </button>
+
+            {/* Messages */}
+            <button
+              onClick={() => {
+                setCurrentView('messages')
+                setMobileMenuOpen(false)
+              }}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'justify-between px-3'} py-2.5 rounded-xl transition-all group ${
+                currentView === 'messages'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-gradient-to-r hover:from-slate-800/50 hover:to-slate-800/30 hover:text-white'
+              }`}
+              title={sidebarCollapsed ? "Messages" : ""}
+            >
+              <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                <svg className={`w-5 h-5 ${currentView === 'messages' ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span className={`font-semibold text-sm ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Messages</span>
+              </div>
+              {currentView === 'messages' && !sidebarCollapsed && (
                 <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
               )}
             </button>
@@ -2798,12 +2877,13 @@ function App() {
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
-                              onClick={() => showSuccess('Chat support coming soon!')}
+                              onClick={() => setCurrentView('messages')}
                               className="w-6 h-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg flex items-center justify-center transition-all hover:scale-110 shadow-lg"
-                              title="New Message"
+                              title="View All Messages"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               </svg>
                             </button>
                           </div>
@@ -2904,16 +2984,659 @@ function App() {
               selectAllOrders={selectAllOrders}
               activeConfig={activeConfig}
               openBulkShippingModal={() => setShowBulkShippingModal(true)}
+              workflowEngine={workflowEngine}
               quickShipOrder={quickShipOrder_handler}
               updateOrderStatus={(orderId, newStatus) => {
                 const order = orders.find(o => o.id === orderId)
                 if (order) {
-                  dataManager.orders.save({ ...order, status: newStatus })
+                  const updatedOrder = { ...order, status: newStatus }
+                  dataManager.orders.save(updatedOrder)
                   loadData()
                   showSuccess(`Order status updated to ${activeConfig.statuses.find(s => s.id === newStatus)?.label}`)
+                  
+                  // Trigger workflow for completed orders
+                  if (newStatus === 'completed' && workflowEngine) {
+                    triggerWorkflow(workflowEngine, 'order.completed', updatedOrder)
+                  }
                 }
               }}
             />
+          )}
+
+          {/* Messages View */}
+          {currentView === 'messages' && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-white">Messages</h2>
+                <p className="text-slate-400">Client and team communications</p>
+              </div>
+
+              {/* Tab Navigation */}
+              <div className="flex space-x-2 mb-6 border-b border-slate-800">
+                <button
+                  onClick={() => setActiveMessagesTab('clients')}
+                  className={`px-6 py-3 font-semibold transition-all ${
+                    activeMessagesTab === 'clients'
+                      ? 'text-blue-400 border-b-2 border-blue-400'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Client Messages
+                  {(messages || []).filter(m => m.sender === 'client' && !m.read).length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                      {(messages || []).filter(m => m.sender === 'client' && !m.read).length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveMessagesTab('team')}
+                  className={`px-6 py-3 font-semibold transition-all ${
+                    activeMessagesTab === 'team'
+                      ? 'text-purple-400 border-b-2 border-purple-400'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Team Chat
+                  {(teamMessages || []).filter(m => m.recipientId === currentUser?.id && !m.read).length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-xs rounded-full">
+                      {(teamMessages || []).filter(m => m.recipientId === currentUser?.id && !m.read).length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Client Messages Tab */}
+              {activeMessagesTab === 'clients' && (
+                <div className="space-y-4">
+                  {/* New Message Button */}
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-white">Conversations</h3>
+                    <button
+                      onClick={() => {
+                        setModalType('newClientMessage')
+                        setShowModal(true)
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span>New Message</span>
+                    </button>
+                  </div>
+                  {clients.map(client => {
+                    const clientMessages = (messages || []).filter(m => m.clientId === client.id)
+                    if (clientMessages.length === 0) return null
+
+                    const unreadCount = clientMessages.filter(m => !m.read && m.sender === 'client').length
+                    const lastMessage = clientMessages.sort((a, b) => 
+                      new Date(b.timestamp) - new Date(a.timestamp)
+                    )[0]
+
+                    const clientOrders = orders.filter(o => o.clientId === client.id)
+                    const clientInvoices = (invoices || []).filter(i => i.clientId === client.id)
+                    const clientQuotes = (quotes || []).filter(q => q.clientId === client.id)
+                    const outstandingInvoices = clientInvoices.filter(i => i.status !== 'paid')
+
+                    return (
+                      <div key={client.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                        {/* Expand Button */}
+                        <div className="absolute top-4 right-4 z-10">
+                          <button
+                            onClick={() => {
+                              setFormData({ expandedClient: client, expandedMessages: clientMessages })
+                              setModalType('expandedConversation')
+                              setShowModal(true)
+                            }}
+                            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors border border-slate-700"
+                            title="Expand conversation"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                          </button>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-0">
+                          {/* Client Info & Quick Actions Sidebar */}
+                          <div className="lg:col-span-1 bg-slate-800/50 p-6 border-b lg:border-b-0 lg:border-r border-slate-700">
+                            <div className="flex lg:flex-col items-center lg:items-start space-x-3 lg:space-x-0 mb-4">
+                              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-2xl flex-shrink-0">
+                                {client.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="lg:mt-4">
+                                <h3 className="text-lg font-bold text-white">{client.name}</h3>
+                                <p className="text-sm text-slate-400">{client.email}</p>
+                                {client.phone && <p className="text-sm text-slate-400">{client.phone}</p>}
+                              </div>
+                            </div>
+
+                            {unreadCount > 0 && (
+                              <div className="mb-4 px-3 py-2 bg-blue-600/20 border border-blue-600 rounded-lg text-center">
+                                <span className="text-blue-400 text-sm font-semibold">{unreadCount} unread message{unreadCount > 1 ? 's' : ''}</span>
+                              </div>
+                            )}
+
+                            {/* Quick Stats */}
+                            <div className="space-y-3 mb-4 pb-4 border-b border-slate-700">
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-400">Active Orders</span>
+                                <span className="text-white font-semibold">{clientOrders.filter(o => o.status !== 'completed').length}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-400">Total Orders</span>
+                                <span className="text-white font-semibold">{clientOrders.length}</span>
+                              </div>
+                              {outstandingInvoices.length > 0 && (
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-orange-400">Outstanding</span>
+                                  <span className="text-orange-400 font-semibold">${outstandingInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0).toFixed(2)}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Quick Actions */}
+                            <div className="space-y-2">
+                              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Quick Actions</h4>
+                              
+                              <button
+                                onClick={() => {
+                                  const clientOrders = orders.filter(o => o.clientId === client.id)
+                                  if (clientOrders.length === 0) {
+                                    alert('This client has no orders. Create an order first to generate an invoice.')
+                                    return
+                                  }
+                                  setFormData({
+                                    clientId: client.id,
+                                    clientName: client.name,
+                                    orderId: clientOrders[0].id,
+                                    orderNumber: clientOrders[0].orderNumber
+                                  })
+                                  setModalType('newInvoice')
+                                  setShowModal(true)
+                                }}
+                                className="w-full px-3 py-2 bg-green-600/20 hover:bg-green-600/30 border border-green-600 text-green-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>New Invoice</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setFormData({ 
+                                    clientId: client.id, 
+                                    clientName: client.name,
+                                    title: '',
+                                    description: '',
+                                    amount: '',
+                                    validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                    status: 'pending'
+                                  })
+                                  setModalType('newQuote')
+                                  setShowModal(true)
+                                }}
+                                className="w-full px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600 text-blue-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>New Quote</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  const portalUrl = `${window.location.origin}/portal`
+                                  const portalCode = client.portalAccessCode || `PORTAL-${client.id}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+                                  
+                                  // Save portal code if it doesn't exist
+                                  if (!client.portalAccessCode) {
+                                    client.portalAccessCode = portalCode
+                                    if (dataManager && dataManager.clients) {
+                                      dataManager.clients.save(client)
+                                    }
+                                  }
+                                  
+                                  setFormData({ 
+                                    portalInfo: {
+                                      client: client,
+                                      url: portalUrl,
+                                      code: portalCode
+                                    }
+                                  })
+                                  setModalType('portalInfo')
+                                  setShowModal(true)
+                                }}
+                                className="w-full px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-600 text-purple-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                <span>Portal Access</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  closeModal()
+                                  setTimeout(() => {
+                                    setCurrentView('clients')
+                                    setTimeout(() => {
+                                      // Find and click the client in the list
+                                      const clientElement = document.querySelector(`[data-client-id="${client.id}"]`)
+                                      if (clientElement) {
+                                        clientElement.click()
+                                      }
+                                    }, 100)
+                                  }, 50)
+                                }}
+                                className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                <span>Full Profile</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Message Thread */}
+                          <div className="lg:col-span-3 p-6">
+                            <div className="space-y-3 mb-4 max-h-96 overflow-y-auto bg-slate-800/30 rounded-lg p-4">
+                          {clientMessages.sort((a, b) => 
+                            new Date(a.timestamp) - new Date(b.timestamp)
+                          ).map(msg => (
+                            <div key={msg.id} className="group">
+                              <div
+                                className={`flex ${msg.sender === 'team' ? 'justify-end' : 'justify-start'}`}
+                              >
+                                <div
+                                  className={`max-w-[70%] rounded-xl p-3 relative ${
+                                    msg.sender === 'team'
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-slate-700 text-slate-100'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <span className="text-xs font-semibold opacity-80">
+                                      {msg.senderName || (msg.sender === 'team' ? currentUser?.name || 'Team' : client.name)}
+                                    </span>
+                                    <span className="text-xs opacity-60">
+                                      {new Date(msg.timestamp).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                                  
+                                  {/* Share Button */}
+                                  {msg.sender === 'client' && (
+                                    <button
+                                      onClick={() => {
+                                        setSharedMessage(`[From ${client.name}]: ${msg.message}`)
+                                        setActiveMessagesTab('team')
+                                        showSuccess('Message copied - select team member to share')
+                                      }}
+                                      className="absolute -right-2 -top-2 w-6 h-6 bg-purple-600 hover:bg-purple-700 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                      title="Share with team"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Reply Input */}
+                        <div className="space-y-3">
+                          {/* Quick Insert Buttons */}
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={(e) => {
+                                const input = e.target.closest('.space-y-3').querySelector('input')
+                                const portalUrl = `${window.location.origin}/portal/${client.id}`
+                                const portalCode = client.portalAccessCode || client.id.slice(-6).toUpperCase()
+                                const outstandingAmount = clientInvoices.filter(i => i.status !== 'paid').reduce((sum, inv) => sum + (inv.total || 0), 0)
+                                
+                                let portalInfo = `Hi ${client.name}! Here's your client portal information:\n\n`
+                                portalInfo += `🔗 Portal Link: ${portalUrl}\n`
+                                portalInfo += `🔑 Access Code: ${portalCode}\n\n`
+                                
+                                if (clientOrders.length > 0) {
+                                  portalInfo += `📦 Active Orders: ${clientOrders.filter(o => o.status !== 'completed').length}\n`
+                                }
+                                
+                                if (outstandingAmount > 0) {
+                                  portalInfo += `💰 Outstanding Balance: $${outstandingAmount.toFixed(2)}\n`
+                                }
+                                
+                                portalInfo += `\nYou can view your orders, invoices, and make payments through the portal. Let me know if you need any help!`
+                                
+                                input.value = portalInfo
+                                input.focus()
+                              }}
+                              className="px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-600/50 text-purple-400 rounded-lg transition-colors text-xs font-medium flex items-center space-x-1"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                              </svg>
+                              <span>Portal Info</span>
+                            </button>
+
+                            {outstandingInvoices.length > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  const input = e.target.closest('.space-y-3').querySelector('input')
+                                  const invoiceList = outstandingInvoices.map(inv => 
+                                    `  • ${inv.number || 'Invoice'}: $${(inv.total || 0).toFixed(2)} (${inv.status || 'pending'})`
+                                  ).join('\n')
+                                  
+                                  let msg = `Hi ${client.name}, you have ${outstandingInvoices.length} outstanding invoice${outstandingInvoices.length > 1 ? 's' : ''}:\n\n`
+                                  msg += invoiceList
+                                  msg += `\n\nTotal: $${outstandingInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0).toFixed(2)}\n\n`
+                                  msg += `You can view and pay these invoices through your client portal. Let me know if you have any questions!`
+                                  
+                                  input.value = msg
+                                  input.focus()
+                                }}
+                                className="px-3 py-1.5 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-600/50 text-orange-400 rounded-lg transition-colors text-xs font-medium flex items-center space-x-1"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span>Outstanding ({outstandingInvoices.length})</span>
+                              </button>
+                            )}
+
+                            {clientOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  const input = e.target.closest('.space-y-3').querySelector('input')
+                                  const activeOrders = clientOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled')
+                                  const orderList = activeOrders.slice(0, 5).map(ord => 
+                                    `  • ${ord.orderNumber || ord.title}: ${ord.status || 'in progress'}`
+                                  ).join('\n')
+                                  
+                                  let msg = `Hi ${client.name}! Here's an update on your active order${activeOrders.length > 1 ? 's' : ''}:\n\n`
+                                  msg += orderList
+                                  if (activeOrders.length > 5) {
+                                    msg += `\n  ... and ${activeOrders.length - 5} more`
+                                  }
+                                  msg += `\n\nYou can track progress in your client portal. Let me know if you have any questions!`
+                                  
+                                  input.value = msg
+                                  input.focus()
+                                }}
+                                className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/50 text-blue-400 rounded-lg transition-colors text-xs font-medium flex items-center space-x-1"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                                <span>Order Status</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Input Field */}
+                          <div className="flex space-x-3">
+                          <input
+                            type="text"
+                            placeholder="Type your reply..."
+                            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter' && e.target.value.trim()) {
+                                const message = {
+                                  id: Date.now().toString(),
+                                  clientId: client.id,
+                                  clientName: client.name,
+                                  sender: 'team',
+                                  senderName: currentUser?.name || 'Team',
+                                  message: e.target.value.trim(),
+                                  timestamp: new Date().toISOString(),
+                                  read: false
+                                }
+                                if (dataManager && dataManager.messages) {
+                                  dataManager.messages.save(message)
+                                }
+                                setMessages([...(messages || []), message])
+                                e.target.value = ''
+                                showSuccess('Message sent!')
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={(e) => {
+                              const input = e.target.closest('.flex').querySelector('input')
+                              if (input.value.trim()) {
+                                const message = {
+                                  id: Date.now().toString(),
+                                  clientId: client.id,
+                                  clientName: client.name,
+                                  sender: 'team',
+                                  senderName: currentUser?.name || 'Team',
+                                  message: input.value.trim(),
+                                  timestamp: new Date().toISOString(),
+                                  read: false
+                                }
+                                if (dataManager && dataManager.messages) {
+                                  dataManager.messages.save(message)
+                                }
+                                setMessages([...(messages || []), message])
+                                input.value = ''
+                                showSuccess('Message sent!')
+                              }
+                            }}
+                            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-2"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                            <span>Send</span>
+                          </button>
+                        </div>
+                        </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {clients.filter(c => (messages || []).some(m => m.clientId === c.id)).length === 0 && (
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
+                      <div className="text-6xl mb-4">💬</div>
+                      <h3 className="text-xl font-bold text-white mb-2">No messages yet</h3>
+                      <p className="text-slate-400">Client messages will appear here when they contact you through the portal.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Team Chat Tab */}
+              {activeMessagesTab === 'team' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Team Members List */}
+                  <div className="lg:col-span-1">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Team Members</h3>
+                        {users.filter(u => u.id !== currentUser?.id && u.active).length === 0 && (
+                          <span className="text-xs text-slate-500">No other team members</span>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {users.filter(u => u.id !== currentUser?.id && u.active).map(user => {
+                          const userTeamMessages = (teamMessages || []).filter(
+                            m => (m.senderId === currentUser?.id && m.recipientId === user.id) ||
+                                 (m.senderId === user.id && m.recipientId === currentUser?.id)
+                          )
+                          const unreadCount = userTeamMessages.filter(m => m.recipientId === currentUser?.id && !m.read).length
+
+                          return (
+                            <button
+                              key={user.id}
+                              onClick={() => setSelectedTeamMember(user)}
+                              className={`w-full flex items-center justify-between p-3 rounded-lg transition-all ${
+                                selectedTeamMember?.id === user.id
+                                  ? 'bg-purple-600/20 border border-purple-600'
+                                  : 'hover:bg-slate-800 border border-transparent'
+                              }`}
+                            >
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                  {user.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="text-left">
+                                  <div className="text-white font-medium text-sm">{user.name}</div>
+                                  <div className="text-xs text-slate-400">{user.role}</div>
+                                </div>
+                              </div>
+                              {unreadCount > 0 && (
+                                <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                                  {unreadCount}
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                        {users.filter(u => u.id !== currentUser?.id && u.active).length === 0 && (
+                          <div className="text-center py-8">
+                            <div className="text-4xl mb-2">👥</div>
+                            <p className="text-sm text-slate-400">No other team members yet</p>
+                            <p className="text-xs text-slate-500 mt-1">Add team members in Settings</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Chat Thread */}
+                  <div className="lg:col-span-2">
+                    {selectedTeamMember ? (
+                      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-[600px]">
+                        {/* Chat Header */}
+                        <div className="p-4 border-b border-slate-800 bg-slate-800/50">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-semibold">
+                              {selectedTeamMember.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="text-white font-semibold">{selectedTeamMember.name}</div>
+                              <div className="text-xs text-slate-400">{selectedTeamMember.email}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Messages */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                          {(teamMessages || [])
+                            .filter(m => 
+                              (m.senderId === currentUser?.id && m.recipientId === selectedTeamMember.id) ||
+                              (m.senderId === selectedTeamMember.id && m.recipientId === currentUser?.id)
+                            )
+                            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                            .map(msg => (
+                              <div
+                                key={msg.id}
+                                className={`flex ${msg.senderId === currentUser?.id ? 'justify-end' : 'justify-start'}`}
+                              >
+                                <div
+                                  className={`max-w-[70%] rounded-xl p-3 ${
+                                    msg.senderId === currentUser?.id
+                                      ? 'bg-purple-600 text-white'
+                                      : 'bg-slate-700 text-slate-100'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <span className="text-xs font-semibold opacity-80">
+                                      {msg.senderId === currentUser?.id ? 'You' : selectedTeamMember.name}
+                                    </span>
+                                    <span className="text-xs opacity-60">
+                                      {new Date(msg.timestamp).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+
+                        {/* Message Input */}
+                        <div className="border-t border-slate-800 p-4 bg-slate-800/30">
+                          <div className="flex space-x-3">
+                            <input
+                              type="text"
+                              value={sharedMessage || ''}
+                              onChange={(e) => setSharedMessage(e.target.value)}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && (sharedMessage || e.target.value).trim()) {
+                                  const message = {
+                                    id: Date.now().toString(),
+                                    senderId: currentUser?.id,
+                                    senderName: currentUser?.name,
+                                    recipientId: selectedTeamMember.id,
+                                    recipientName: selectedTeamMember.name,
+                                    message: (sharedMessage || e.target.value).trim(),
+                                    timestamp: new Date().toISOString(),
+                                    read: false
+                                  }
+                                  if (dataManager && dataManager.teamMessages) {
+                                    dataManager.teamMessages.save(message)
+                                  }
+                                  setTeamMessages([...(teamMessages || []), message])
+                                  setSharedMessage('')
+                                  e.target.value = ''
+                                  showSuccess('Message sent!')
+                                }
+                              }}
+                              placeholder="Type your message..."
+                              className="flex-1 bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                            <button
+                              onClick={() => {
+                                if (sharedMessage?.trim()) {
+                                  const message = {
+                                    id: Date.now().toString(),
+                                    senderId: currentUser?.id,
+                                    senderName: currentUser?.name,
+                                    recipientId: selectedTeamMember.id,
+                                    recipientName: selectedTeamMember.name,
+                                    message: sharedMessage.trim(),
+                                    timestamp: new Date().toISOString(),
+                                    read: false
+                                  }
+                                  if (dataManager && dataManager.teamMessages) {
+                                    dataManager.teamMessages.save(message)
+                                  }
+                                  setTeamMessages([...(teamMessages || []), message])
+                                  setSharedMessage('')
+                                  showSuccess('Message sent!')
+                                }
+                              }}
+                              disabled={!sharedMessage?.trim()}
+                              className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center space-x-2"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                              </svg>
+                              <span>Send</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center h-[600px] flex flex-col items-center justify-center">
+                        <div className="text-6xl mb-4">👥</div>
+                        <h3 className="text-xl font-bold text-white mb-2">Select a team member</h3>
+                        <p className="text-slate-400">Choose someone from the list to start chatting</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {currentView === 'clients' && (
@@ -2923,6 +3646,7 @@ function App() {
               openNewClientModal={openNewClientModal}
               openNewOrderModal={openNewOrderModal}
               setCurrentView={setCurrentView}
+              workflowEngine={workflowEngine}
             />
           )}
 
@@ -2957,6 +3681,7 @@ function App() {
               openNewOrderModal={openNewOrderModal}
               openOrderDetailModal={openOrderDetailModal}
               activeConfig={activeConfig}
+              workflowEngine={workflowEngine}
             />
           )}
 
@@ -3166,6 +3891,7 @@ function App() {
               showSuccess={showSuccess}
               loadSampleData={loadSampleData}
               clearAllData={clearAllData}
+              workflowEngine={workflowEngine}
             />
           )}
 
@@ -3178,6 +3904,26 @@ function App() {
               showSuccess={showSuccess}
               showConfirm={showConfirm}
               openNewOrderModal={openNewOrderModal}
+              workflowEngine={workflowEngine}
+              setCurrentView={setCurrentView}
+              setShowModal={setShowModal}
+              setModalType={setModalType}
+              setFormData={setFormData}
+            />
+          )}
+
+          {/* Client Portal View */}
+          {currentView === 'clientPortal' && (
+            <ClientPortalView
+              clients={clients}
+              quotes={quotes}
+              invoices={invoices}
+              timesheets={timesheets}
+              orders={orders}
+              messages={messages}
+              setMessages={setMessages}
+              dataManager={dataManager}
+              currentUser={currentUser}
             />
           )}
 
@@ -3323,6 +4069,12 @@ function App() {
         setModalType={setModalType}
         setFormData={setFormData}
         setShowModal={setShowModal}
+        orders={orders}
+        clients={clients}
+        quotes={quotes}
+        tasks={tasks}
+        notes={notes}
+        inventory={inventory}
       />
 
       {/* Modals */}
@@ -3462,6 +4214,711 @@ function App() {
                 </div>
               </>
             )}
+
+            {/* New Client Message Modal */}
+            {modalType === 'newClientMessage' && (
+              <>
+                <div className="p-4 sm:p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+                  <h2 className="text-lg sm:text-xl font-bold text-white">✉️ New Message to Client</h2>
+                  <button onClick={closeModal} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+                </div>
+                
+                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Select Client *</label>
+                    <select
+                      value={formData.clientId || ''}
+                      onChange={(e) => {
+                        const selectedClient = clients.find(c => c.id === e.target.value)
+                        setFormData({
+                          ...formData, 
+                          clientId: e.target.value,
+                          clientName: selectedClient?.name || ''
+                        })
+                      }}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="">Choose a client...</option>
+                      {clients.map(client => (
+                        <option key={client.id} value={client.id}>{client.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Message *</label>
+                    
+                    {/* Quick Insert Buttons */}
+                    {formData.clientId && (() => {
+                      const selectedClient = clients.find(c => c.id === formData.clientId)
+                      if (!selectedClient) return null
+                      
+                      const clientOrders = orders.filter(o => o.clientId === selectedClient.id)
+                      const clientInvoices = (invoices || []).filter(i => i.clientId === selectedClient.id)
+                      const outstandingInvoices = clientInvoices.filter(i => i.status !== 'paid')
+                      
+                      return (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const portalUrl = `${window.location.origin}/portal/${selectedClient.id}`
+                              const portalCode = selectedClient.portalAccessCode || selectedClient.id.slice(-6).toUpperCase()
+                              const outstandingAmount = outstandingInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
+                              
+                              let portalInfo = `Hi ${selectedClient.name}! Here's your client portal information:\n\n`
+                              portalInfo += `🔗 Portal Link: ${portalUrl}\n`
+                              portalInfo += `🔑 Access Code: ${portalCode}\n\n`
+                              
+                              if (clientOrders.length > 0) {
+                                portalInfo += `📦 Active Orders: ${clientOrders.filter(o => o.status !== 'completed').length}\n`
+                              }
+                              
+                              if (outstandingAmount > 0) {
+                                portalInfo += `💰 Outstanding Balance: $${outstandingAmount.toFixed(2)}\n`
+                              }
+                              
+                              portalInfo += `\nYou can view your orders, invoices, and make payments through the portal. Let me know if you need any help!`
+                              
+                              setFormData({...formData, message: portalInfo})
+                            }}
+                            className="px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-600/50 text-purple-400 rounded-lg transition-colors text-xs font-medium flex items-center space-x-1"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                            </svg>
+                            <span>Portal Info</span>
+                          </button>
+
+                          {outstandingInvoices.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const invoiceList = outstandingInvoices.map(inv => 
+                                  `  • ${inv.number || 'Invoice'}: $${(inv.total || 0).toFixed(2)} (${inv.status || 'pending'})`
+                                ).join('\n')
+                                
+                                let msg = `Hi ${selectedClient.name}, you have ${outstandingInvoices.length} outstanding invoice${outstandingInvoices.length > 1 ? 's' : ''}:\n\n`
+                                msg += invoiceList
+                                msg += `\n\nTotal: $${outstandingInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0).toFixed(2)}\n\n`
+                                msg += `You can view and pay these invoices through your client portal. Let me know if you have any questions!`
+                                
+                                setFormData({...formData, message: msg})
+                              }}
+                              className="px-3 py-1.5 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-600/50 text-orange-400 rounded-lg transition-colors text-xs font-medium flex items-center space-x-1"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>Outstanding ({outstandingInvoices.length})</span>
+                            </button>
+                          )}
+
+                          {clientOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const activeOrders = clientOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled')
+                                const orderList = activeOrders.slice(0, 5).map(ord => 
+                                  `  • ${ord.orderNumber || ord.title}: ${ord.status || 'in progress'}`
+                                ).join('\n')
+                                
+                                let msg = `Hi ${selectedClient.name}! Here's an update on your active order${activeOrders.length > 1 ? 's' : ''}:\n\n`
+                                msg += orderList
+                                if (activeOrders.length > 5) {
+                                  msg += `\n  ... and ${activeOrders.length - 5} more`
+                                }
+                                msg += `\n\nYou can track progress in your client portal. Let me know if you have any questions!`
+                                
+                                setFormData({...formData, message: msg})
+                              }}
+                              className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/50 text-blue-400 rounded-lg transition-colors text-xs font-medium flex items-center space-x-1"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                              <span>Order Status</span>
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })()}
+                    
+                    <textarea
+                      value={formData.message || ''}
+                      onChange={(e) => setFormData({...formData, message: e.target.value})}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      placeholder="Type your message here..."
+                      rows={8}
+                    />
+                  </div>
+                </div>
+                
+                <div className="p-4 sm:p-6 border-t border-slate-800 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 flex-shrink-0">
+                  <button
+                    onClick={closeModal}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!formData.clientId || !formData.message?.trim()) {
+                        alert('Please select a client and enter a message')
+                        return
+                      }
+                      
+                      const newMessage = {
+                        id: dataManager.generateId('message'),
+                        clientId: formData.clientId,
+                        clientName: formData.clientName,
+                        sender: 'team',
+                        senderName: currentUser?.name || 'Team',
+                        message: formData.message.trim(),
+                        timestamp: new Date().toISOString(),
+                        read: false
+                      }
+                      
+                      if (dataManager && dataManager.messages) {
+                        dataManager.messages.save(newMessage)
+                      }
+                      setMessages([...(messages || []), newMessage])
+                      showSuccess('Message sent to ' + formData.clientName)
+                      closeModal()
+                    }}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold"
+                  >
+                    Send Message
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* New Quote Modal */}
+            {modalType === 'newQuote' && (
+              <>
+                <div className="p-4 sm:p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+                  <h2 className="text-lg sm:text-xl font-bold text-white">📋 New Quote</h2>
+                  <button onClick={closeModal} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+                </div>
+                
+                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Client *</label>
+                    <select
+                      value={formData.clientId || ''}
+                      onChange={(e) => {
+                        const selectedClient = clients.find(c => c.id === e.target.value)
+                        setFormData({
+                          ...formData, 
+                          clientId: e.target.value,
+                          clientName: selectedClient?.name || ''
+                        })
+                      }}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      disabled={!!formData.clientId}
+                    >
+                      <option value="">Choose a client...</option>
+                      {clients.map(client => (
+                        <option key={client.id} value={client.id}>{client.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Project Title *</label>
+                    <input
+                      type="text"
+                      value={formData.title || ''}
+                      onChange={(e) => setFormData({...formData, title: e.target.value})}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      placeholder="Custom bookshelf"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                    <textarea
+                      value={formData.description || ''}
+                      onChange={(e) => setFormData({...formData, description: e.target.value})}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      placeholder="Project details..."
+                      rows={4}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Amount *</label>
+                      <input
+                        type="number"
+                        value={formData.amount || ''}
+                        onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                        className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                        placeholder="0.00"
+                        step="0.01"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Valid Until</label>
+                      <input
+                        type="date"
+                        value={formData.validUntil || ''}
+                        onChange={(e) => setFormData({...formData, validUntil: e.target.value})}
+                        className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-4 sm:p-6 border-t border-slate-800 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 flex-shrink-0">
+                  <button
+                    onClick={closeModal}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!formData.clientId || !formData.title?.trim() || !formData.amount) {
+                        alert('Please fill in all required fields')
+                        return
+                      }
+                      
+                      const newQuote = {
+                        id: dataManager.generateId('quote'),
+                        clientId: formData.clientId,
+                        clientName: formData.clientName,
+                        title: formData.title.trim(),
+                        description: formData.description?.trim() || '',
+                        amount: parseFloat(formData.amount),
+                        status: 'pending',
+                        validUntil: formData.validUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                        createdAt: new Date().toISOString(),
+                        createdBy: currentUser?.id
+                      }
+                      
+                      if (dataManager && dataManager.quotes) {
+                        dataManager.quotes.save(newQuote)
+                      }
+                      setQuotes([...(quotes || []), newQuote])
+                      showSuccess('Quote created for ' + formData.clientName)
+                      
+                      // Optionally send a message to the client
+                      const quoteMessage = {
+                        id: dataManager.generateId('message'),
+                        clientId: formData.clientId,
+                        clientName: formData.clientName,
+                        sender: 'team',
+                        senderName: currentUser?.name || 'Team',
+                        message: `Hi ${formData.clientName}, I've prepared a quote for "${formData.title}". The estimated cost is $${parseFloat(formData.amount).toFixed(2)}. Please review and let me know if you have any questions!`,
+                        timestamp: new Date().toISOString(),
+                        read: false
+                      }
+                      if (dataManager && dataManager.messages) {
+                        dataManager.messages.save(quoteMessage)
+                      }
+                      setMessages([...(messages || []), quoteMessage])
+                      
+                      closeModal()
+                      setCurrentView('messages')
+                    }}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold"
+                  >
+                    Create Quote & Notify Client
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Expanded Conversation Modal */}
+            {modalType === 'expandedConversation' && formData.expandedClient && (
+              <>
+                <div className="p-4 sm:p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0 bg-slate-800/50">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xl">
+                      {formData.expandedClient.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{formData.expandedClient.name}</h2>
+                      <p className="text-sm text-slate-400">{formData.expandedClient.email}</p>
+                    </div>
+                  </div>
+                  <button onClick={closeModal} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-6 bg-slate-900/50">
+                  {/* Message Thread */}
+                  <div className="max-w-5xl mx-auto space-y-4">
+                    {(formData.expandedMessages || []).sort((a, b) => 
+                      new Date(a.timestamp) - new Date(b.timestamp)
+                    ).map(msg => (
+                      <div key={msg.id} className="group">
+                        <div
+                          className={`flex ${msg.sender === 'team' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`max-w-[75%] rounded-xl p-4 relative ${
+                              msg.sender === 'team'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-700 text-slate-100'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2 mb-2">
+                              <span className="text-sm font-semibold opacity-90">
+                                {msg.senderName || (msg.sender === 'team' ? currentUser?.name || 'Team' : formData.expandedClient.name)}
+                              </span>
+                              <span className="text-xs opacity-70">
+                                {new Date(msg.timestamp).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-base leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                            
+                            {/* Copy Button */}
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(msg.message)
+                                showSuccess('Message copied')
+                              }}
+                              className="absolute -right-2 -top-2 w-7 h-7 bg-slate-600 hover:bg-slate-700 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                              title="Copy message"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {(!formData.expandedMessages || formData.expandedMessages.length === 0) && (
+                      <div className="text-center py-12 text-slate-400">
+                        <div className="text-5xl mb-3">💬</div>
+                        <p>No messages in this conversation yet</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Reply Input at Bottom */}
+                <div className="border-t border-slate-800 p-4 sm:p-6 bg-slate-800/30 flex-shrink-0">
+                  <div className="max-w-5xl mx-auto">
+                    <div className="flex space-x-3">
+                      <input
+                        type="text"
+                        placeholder="Type your reply..."
+                        className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && e.target.value.trim()) {
+                            const message = {
+                              id: Date.now().toString(),
+                              clientId: formData.expandedClient.id,
+                              clientName: formData.expandedClient.name,
+                              sender: 'team',
+                              senderName: currentUser?.name || 'Team',
+                              message: e.target.value.trim(),
+                              timestamp: new Date().toISOString(),
+                              read: false
+                            }
+                            if (dataManager && dataManager.messages) {
+                              dataManager.messages.save(message)
+                            }
+                            const updatedMessages = [...(messages || []), message]
+                            setMessages(updatedMessages)
+                            setFormData({...formData, expandedMessages: [...(formData.expandedMessages || []), message]})
+                            e.target.value = ''
+                            showSuccess('Message sent!')
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={(e) => {
+                          const input = e.target.closest('.flex').querySelector('input')
+                          if (input.value.trim()) {
+                            const message = {
+                              id: Date.now().toString(),
+                              clientId: formData.expandedClient.id,
+                              clientName: formData.expandedClient.name,
+                              sender: 'team',
+                              senderName: currentUser?.name || 'Team',
+                              message: input.value.trim(),
+                              timestamp: new Date().toISOString(),
+                              read: false
+                            }
+                            if (dataManager && dataManager.messages) {
+                              dataManager.messages.save(message)
+                            }
+                            const updatedMessages = [...(messages || []), message]
+                            setMessages(updatedMessages)
+                            setFormData({...formData, expandedMessages: [...(formData.expandedMessages || []), message]})
+                            input.value = ''
+                            showSuccess('Message sent!')
+                          }
+                        }}
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                        <span>Send</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Portal Info Modal */}
+            {modalType === 'portalInfo' && formData.portalInfo && (
+              <>
+                <div className="p-4 sm:p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+                  <h2 className="text-lg sm:text-xl font-bold text-white">🔑 Client Portal Access</h2>
+                  <button onClick={closeModal} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+                </div>
+                
+                <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
+                  <div className="bg-slate-800/50 rounded-xl p-6">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-semibold text-xl">
+                        {formData.portalInfo.client.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{formData.portalInfo.client.name}</h3>
+                        <p className="text-sm text-slate-400">{formData.portalInfo.client.email}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Portal URL</label>
+                        <div className="flex space-x-2">
+                          <input
+                            type="text"
+                            value={formData.portalInfo.url}
+                            readOnly
+                            className="flex-1 p-3 bg-slate-700 border border-slate-600 rounded-lg text-white font-mono text-sm"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(formData.portalInfo.url)
+                              showSuccess('Portal URL copied!')
+                            }}
+                            className="px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Access Code</label>
+                        <div className="flex space-x-2">
+                          <input
+                            type="text"
+                            value={formData.portalInfo.code}
+                            readOnly
+                            className="flex-1 p-3 bg-slate-700 border border-slate-600 rounded-lg text-white font-mono text-sm"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(formData.portalInfo.code)
+                              showSuccess('Access code copied!')
+                            }}
+                            className="px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-blue-600/10 border border-blue-600/30 rounded-xl p-4">
+                    <h4 className="text-sm font-semibold text-blue-400 mb-2">📧 Send to Client</h4>
+                    <p className="text-sm text-slate-300 mb-3">
+                      Copy the URL and access code above to send to {formData.portalInfo.client.name}. They can use these credentials to access their client portal and view orders, invoices, and messages.
+                    </p>
+                    <button
+                      onClick={() => {
+                        const message = `Hi ${formData.portalInfo.client.name}!\n\nHere's your client portal access information:\n\n🔗 Portal URL: ${formData.portalInfo.url}\n🔑 Access Code: ${formData.portalInfo.code}\n\nYou can use these credentials to view your orders, invoices, and messages. Let me know if you need any help!`
+                        navigator.clipboard.writeText(message)
+                        showSuccess('Portal info message copied - paste it anywhere to send!')
+                      }}
+                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                    >
+                      Copy Portal Info Message
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-4 sm:p-6 border-t border-slate-800 flex justify-end flex-shrink-0">
+                  <button
+                    onClick={closeModal}
+                    className="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* New Invoice Modal */}
+            {modalType === 'newInvoice' && (() => {
+              // Generate client initials and next invoice number
+              const generateInvoiceNumber = () => {
+                if (!formData.clientName) return 'INV XX 001'
+                
+                // Get client initials (first letter of first name + first letter of last name)
+                const nameParts = formData.clientName.trim().split(' ')
+                const initials = nameParts.length >= 2 
+                  ? (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase()
+                  : nameParts[0].substring(0, 2).toUpperCase()
+                
+                // Count existing invoices for this client
+                const clientInvoices = (invoices || []).filter(inv => inv.clientId === formData.clientId)
+                const nextNumber = (clientInvoices.length + 1).toString().padStart(3, '0')
+                
+                return `INV ${initials} ${nextNumber}`
+              }
+              
+              // Set initial invoice number if not already set
+              if (!formData.invoiceNumber && formData.clientName) {
+                formData.invoiceNumber = generateInvoiceNumber()
+              }
+              
+              return (
+              <>
+                <div className="p-4 sm:p-6 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+                  <h2 className="text-lg sm:text-xl font-bold text-white">💰 Create Invoice</h2>
+                  <button onClick={closeModal} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+                </div>
+                
+                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                  <div className="bg-blue-600/10 border border-blue-600/30 rounded-lg p-4 mb-4">
+                    <p className="text-sm text-slate-300">
+                      📋 Creating invoice for: <span className="font-semibold text-white">{formData.clientName}</span>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Invoice Number *</label>
+                    <input
+                      type="text"
+                      value={formData.invoiceNumber || generateInvoiceNumber()}
+                      onChange={(e) => setFormData({...formData, invoiceNumber: e.target.value})}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none font-mono"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Format: INV [Initials] [Number] - e.g., INV MC 001</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Issue Date *</label>
+                      <input
+                        type="date"
+                        value={formData.issueDate || new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setFormData({...formData, issueDate: e.target.value})}
+                        className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Due Date *</label>
+                      <input
+                        type="date"
+                        value={formData.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                        onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
+                        className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Amount *</label>
+                    <input
+                      type="number"
+                      value={formData.invoiceAmount || ''}
+                      onChange={(e) => setFormData({...formData, invoiceAmount: e.target.value})}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      placeholder="0.00"
+                      step="0.01"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                    <textarea
+                      value={formData.invoiceDescription || ''}
+                      onChange={(e) => setFormData({...formData, invoiceDescription: e.target.value})}
+                      className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                      rows={4}
+                      placeholder="Services rendered, items delivered, etc."
+                    />
+                  </div>
+                </div>
+                
+                <div className="p-4 sm:p-6 border-t border-slate-800 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 flex-shrink-0">
+                  <button
+                    onClick={closeModal}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!formData.invoiceAmount || parseFloat(formData.invoiceAmount) <= 0) {
+                        alert('Please enter a valid amount')
+                        return
+                      }
+                      
+                      // Generate client-specific invoice number
+                      const generateInvoiceNum = () => {
+                        if (!formData.clientName) return 'INV XX 001'
+                        const nameParts = formData.clientName.trim().split(' ')
+                        const initials = nameParts.length >= 2 
+                          ? (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase()
+                          : nameParts[0].substring(0, 2).toUpperCase()
+                        
+                        const clientInvoices = (invoices || []).filter(inv => inv.clientId === formData.clientId)
+                        const nextNumber = (clientInvoices.length + 1).toString().padStart(3, '0')
+                        
+                        return `INV ${initials} ${nextNumber}`
+                      }
+                      
+                      const newInvoice = {
+                        id: dataManager.generateId('invoice'),
+                        number: formData.invoiceNumber || generateInvoiceNum(),
+                        clientId: formData.clientId,
+                        clientName: formData.clientName,
+                        issueDate: formData.issueDate || new Date().toISOString(),
+                        dueDate: formData.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                        total: parseFloat(formData.invoiceAmount),
+                        description: formData.invoiceDescription || '',
+                        status: 'pending',
+                        createdAt: new Date().toISOString(),
+                        createdBy: currentUser?.id
+                      }
+                      
+                      if (dataManager && dataManager.invoices) {
+                        dataManager.invoices.save(newInvoice)
+                      }
+                      setInvoices([...(invoices || []), newInvoice])
+                      showSuccess('Invoice created successfully!')
+                      closeModal()
+                    }}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-semibold"
+                  >
+                    Create Invoice
+                  </button>
+                </div>
+              </>
+            )})()}
 
             {/* New Order Modal */}
             {modalType === 'newOrder' && (

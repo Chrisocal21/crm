@@ -397,6 +397,59 @@ const ClientsView = ({
                   </a>
                 )}
               </div>
+
+              {/* Portal Access Section */}
+              <div className="mt-3 pt-3 border-t border-slate-700">
+                {client.portalAccessCode ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Portal Access Code:</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigator.clipboard.writeText(client.portalAccessCode)
+                          alert('Portal code copied!')
+                        }}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div className="px-3 py-2 bg-slate-900/50 rounded-lg border border-slate-700 text-sm font-mono text-green-400">
+                      {client.portalAccessCode}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const newCode = `PORTAL-${client.id}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+                        client.portalAccessCode = newCode
+                        alert(`New portal code generated:\n${newCode}`)
+                      }}
+                      className="w-full px-2 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-white text-xs flex items-center justify-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Regenerate Code
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const code = `PORTAL-${client.id}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+                      client.portalAccessCode = code
+                      alert(`Portal access code generated:\n${code}\n\nShare this code with your client to access their portal.`)
+                    }}
+                    className="w-full px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-600/30 rounded-lg transition-colors text-purple-400 text-sm font-medium flex items-center justify-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                    Generate Portal Access
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}

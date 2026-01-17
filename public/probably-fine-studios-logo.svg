@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" fill="none">
+  <!-- Probably Fine (primary) -->
+  <text x="0" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600" fill="#000000">Probably Fine</text>
+  
+  <!-- Studios (secondary, lighter, indented) -->
+  <text x="40" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="400" fill="#666666">Studios</text>
+</svg>

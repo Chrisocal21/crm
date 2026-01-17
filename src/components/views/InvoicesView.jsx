@@ -1,12 +1,29 @@
+import { useEffect } from 'react'
 import { formatMoney, formatDate, calculateOrderPricing } from '../../utils/helpers'
+import { triggerWorkflow } from '../../utils/workflows'
 
 export default function InvoicesView({ 
   orders, 
   clients, 
   openNewOrderModal, 
   openOrderDetailModal,
-  activeConfig 
+  activeConfig,
+  workflowEngine
 }) {
+  // Check for overdue invoices on mount
+  useEffect(() => {
+    if (!workflowEngine) return
+    
+    const today = new Date()
+    orders.forEach(order => {
+      if (order.invoiceStatus === 'unpaid' && order.dueDate) {
+        const dueDate = new Date(order.dueDate)
+        if (dueDate < today) {
+          triggerWorkflow(workflowEngine, 'invoice.overdue', order)
+        }
+      }
+    })
+  }, [orders, workflowEngine])
   const handlePrintInvoice = (order) => {
     const client = clients.find(c => c.id === order.clientId)
     const statusConfig = activeConfig.statuses.find(s => s.id === order.status)

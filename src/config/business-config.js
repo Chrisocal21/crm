@@ -4,15 +4,15 @@
 export const CONFIG = {
   business: {
     name: "ANCHOR",
-    tagline: "Your business foundation",
+    tagline: "Built for growth",
     logo: "/screenshots/anchor-logo.svg",
     logoEmoji: "⚓",
     currency: "USD",
     currencySymbol: "$",
-    email: "hello@anchorcrm.com",
+    email: "hello@probablyfinestudios.com",
     phone: "(555) 123-4567",
     address: "123 Business St, Metro City, MC 12345",
-    website: "https://anchorcrm.com"
+    website: "https://probablyfinestudios.com"
   },
 
   statuses: [

@@ -144,22 +144,53 @@ const DashboardView = ({
         </svg>
       ),
       component: (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 lg:p-6">
-            <div className="text-slate-400 text-sm mb-2">Total Orders</div>
-            <div className="text-xl font-bold whitespace-nowrap overflow-hidden text-ellipsis">{stats.total || 0}</div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-lg p-3 hover:border-slate-600 transition-colors">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1 bg-slate-700/50 rounded">
+                <svg className="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="text-xs text-slate-400">Total Orders</div>
+            </div>
+            <div className="text-xl font-bold text-white">{stats.total || 0}</div>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <div className="text-slate-400 text-sm mb-2">Active Orders</div>
-            <div className="text-xl font-bold text-blue-400 whitespace-nowrap overflow-hidden text-ellipsis">{stats.active || 0}</div>
+          
+          <div className="bg-gradient-to-br from-blue-900/20 to-blue-800/10 border border-blue-700/30 rounded-lg p-3 hover:border-blue-600/50 transition-colors">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1 bg-blue-700/30 rounded">
+                <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div className="text-xs text-slate-400">Active</div>
+            </div>
+            <div className="text-xl font-bold text-blue-400">{stats.active || 0}</div>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <div className="text-slate-400 text-sm mb-2">Total Revenue</div>
-            <div className="text-xl font-bold text-green-400 whitespace-nowrap overflow-hidden text-ellipsis">{formatMoney(stats.totalRevenue || 0)}</div>
+          
+          <div className="bg-gradient-to-br from-green-900/20 to-green-800/10 border border-green-700/30 rounded-lg p-3 hover:border-green-600/50 transition-colors">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1 bg-green-700/30 rounded">
+                <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="text-xs text-slate-400">Revenue</div>
+            </div>
+            <div className="text-xl font-bold text-green-400">{formatMoney(stats.totalRevenue || 0)}</div>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <div className="text-slate-400 text-sm mb-2">Outstanding</div>
-            <div className="text-xl font-bold text-yellow-400 whitespace-nowrap overflow-hidden text-ellipsis">{formatMoney(stats.outstandingBalance || 0)}</div>
+          
+          <div className="bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border border-yellow-700/30 rounded-lg p-3 hover:border-yellow-600/50 transition-colors">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1 bg-yellow-700/30 rounded">
+                <svg className="w-3.5 h-3.5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="text-xs text-slate-400">Outstanding</div>
+            </div>
+            <div className="text-xl font-bold text-yellow-400">{formatMoney(stats.outstandingBalance || 0)}</div>
           </div>
         </div>
       )
@@ -173,38 +204,41 @@ const DashboardView = ({
         </svg>
       ),
       component: totalAlerts > 0 && (
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <h2 className="text-xl font-bold text-white">Shipping Alerts</h2>
-              <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded-full text-xs font-medium">
-                {totalAlerts}
-              </span>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/20 rounded-lg">
+                <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-white">Shipping Alerts</h3>
             </div>
+            <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-sm font-semibold">
+              {totalAlerts}
+            </span>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {shippingAlerts.shipOverdue.length > 0 && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-red-400">Ship Overdue</span>
-                  <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-red-400 text-sm font-semibold">Ship Overdue</span>
+                  <span className="ml-auto px-2 py-0.5 bg-red-500/30 text-red-300 rounded-full text-xs font-bold">
                     {shippingAlerts.shipOverdue.length}
                   </span>
                 </div>
-                <div className="space-y-1">
-                  {shippingAlerts.shipOverdue.slice(0, 3).map(({ order, days }) => {
+                <div className="space-y-2">
+                  {shippingAlerts.shipOverdue.slice(0, 2).map(({ order, days }) => {
                     const client = clients.find(c => c.id === order.clientId)
                     return (
                       <div 
                         key={order.id} 
                         onClick={() => openOrderDetailModal(order)}
-                        className="text-xs text-slate-300 hover:text-white cursor-pointer truncate"
+                        className="text-xs text-slate-300 hover:text-white cursor-pointer transition-colors p-2 hover:bg-red-500/10 rounded"
                       >
-                        {client?.name} - {days}d late
+                        <div className="font-medium truncate">{client?.name}</div>
+                        <div className="text-red-400">{days}d overdue</div>
                       </div>
                     )
                   })}
@@ -213,23 +247,24 @@ const DashboardView = ({
             )}
             
             {shippingAlerts.shipToday.length > 0 && (
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-amber-400">Ship Today</span>
-                  <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full text-xs font-bold">
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-amber-400 text-sm font-semibold">Ship Today</span>
+                  <span className="ml-auto px-2 py-0.5 bg-amber-500/30 text-amber-300 rounded-full text-xs font-bold">
                     {shippingAlerts.shipToday.length}
                   </span>
                 </div>
-                <div className="space-y-1">
-                  {shippingAlerts.shipToday.slice(0, 3).map((order) => {
+                <div className="space-y-2">
+                  {shippingAlerts.shipToday.slice(0, 2).map((order) => {
                     const client = clients.find(c => c.id === order.clientId)
                     return (
                       <div 
                         key={order.id} 
                         onClick={() => openOrderDetailModal(order)}
-                        className="text-xs text-slate-300 hover:text-white cursor-pointer truncate"
+                        className="text-xs text-slate-300 hover:text-white cursor-pointer transition-colors p-2 hover:bg-amber-500/10 rounded"
                       >
-                        {client?.name}
+                        <div className="font-medium truncate">{client?.name}</div>
+                        <div className="text-amber-400">Today</div>
                       </div>
                     )
                   })}
@@ -238,23 +273,24 @@ const DashboardView = ({
             )}
             
             {shippingAlerts.shipSoon.length > 0 && (
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-yellow-400">Ship Soon</span>
-                  <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full text-xs font-bold">
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-yellow-400 text-sm font-semibold">Ship Soon</span>
+                  <span className="ml-auto px-2 py-0.5 bg-yellow-500/30 text-yellow-300 rounded-full text-xs font-bold">
                     {shippingAlerts.shipSoon.length}
                   </span>
                 </div>
-                <div className="space-y-1">
-                  {shippingAlerts.shipSoon.slice(0, 3).map(({ order, days }) => {
+                <div className="space-y-2">
+                  {shippingAlerts.shipSoon.slice(0, 2).map(({ order, days }) => {
                     const client = clients.find(c => c.id === order.clientId)
                     return (
                       <div 
                         key={order.id} 
                         onClick={() => openOrderDetailModal(order)}
-                        className="text-xs text-slate-300 hover:text-white cursor-pointer truncate"
+                        className="text-xs text-slate-300 hover:text-white cursor-pointer transition-colors p-2 hover:bg-yellow-500/10 rounded"
                       >
-                        {client?.name} - {days}d
+                        <div className="font-medium truncate">{client?.name}</div>
+                        <div className="text-yellow-400">In {days} days</div>
                       </div>
                     )
                   })}
@@ -263,23 +299,24 @@ const DashboardView = ({
             )}
             
             {shippingAlerts.deliveryOverdue.length > 0 && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-red-400">Delivery Overdue</span>
-                  <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-red-400 text-sm font-semibold">Delivery Overdue</span>
+                  <span className="ml-auto px-2 py-0.5 bg-red-500/30 text-red-300 rounded-full text-xs font-bold">
                     {shippingAlerts.deliveryOverdue.length}
                   </span>
                 </div>
-                <div className="space-y-1">
-                  {shippingAlerts.deliveryOverdue.slice(0, 3).map(({ order, days }) => {
+                <div className="space-y-2">
+                  {shippingAlerts.deliveryOverdue.slice(0, 2).map(({ order, days }) => {
                     const client = clients.find(c => c.id === order.clientId)
                     return (
                       <div 
                         key={order.id} 
                         onClick={() => openOrderDetailModal(order)}
-                        className="text-xs text-slate-300 hover:text-white cursor-pointer truncate"
+                        className="text-xs text-slate-300 hover:text-white cursor-pointer transition-colors p-2 hover:bg-red-500/10 rounded"
                       >
-                        {client?.name} - {days}d late
+                        <div className="font-medium truncate">{client?.name}</div>
+                        <div className="text-red-400">{days}d late</div>
                       </div>
                     )
                   })}
@@ -288,23 +325,24 @@ const DashboardView = ({
             )}
             
             {shippingAlerts.noTracking.length > 0 && (
-              <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-orange-400">No Tracking</span>
-                  <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full text-xs font-bold">
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-orange-400 text-sm font-semibold">No Tracking</span>
+                  <span className="ml-auto px-2 py-0.5 bg-orange-500/30 text-orange-300 rounded-full text-xs font-bold">
                     {shippingAlerts.noTracking.length}
                   </span>
                 </div>
-                <div className="space-y-1">
-                  {shippingAlerts.noTracking.slice(0, 3).map((order) => {
+                <div className="space-y-2">
+                  {shippingAlerts.noTracking.slice(0, 2).map((order) => {
                     const client = clients.find(c => c.id === order.clientId)
                     return (
                       <div 
                         key={order.id} 
                         onClick={() => openOrderDetailModal(order)}
-                        className="text-xs text-slate-300 hover:text-white cursor-pointer truncate"
+                        className="text-xs text-slate-300 hover:text-white cursor-pointer transition-colors p-2 hover:bg-orange-500/10 rounded"
                       >
-                        {client?.name}
+                        <div className="font-medium truncate">{client?.name}</div>
+                        <div className="text-orange-400">Add tracking</div>
                       </div>
                     )
                   })}
@@ -325,6 +363,13 @@ const DashboardView = ({
       ),
       component: (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-lg font-semibold text-white">Recent Orders</h3>
+            {orders.length > 0 && (
+              <span className="text-sm text-slate-400">{orders.length} total</span>
+            )}
+          </div>
+          
           {orders.length === 0 ? (
           <div className="text-center py-12">
             <svg className="w-16 h-16 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -340,7 +385,7 @@ const DashboardView = ({
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
           {orders.slice(0, 5).map(order => {
             const client = clients.find(c => c.id === order.clientId)
             const dueDateStatus = getDueDateStatus(order.timeline?.dueDate)
@@ -352,57 +397,41 @@ const DashboardView = ({
               <div 
                 key={order.id}
                 onClick={() => openOrderDetailModal(order)}
-                className="bg-slate-800 rounded-lg p-4 lg:p-6 hover:bg-slate-700 transition-colors cursor-pointer border-l-4"
-                style={{ borderLeftColor: statusConfig?.color || '#64748b' }}
+                className="group bg-slate-800/50 hover:bg-slate-800 rounded-lg p-4 transition-all cursor-pointer border border-transparent hover:border-slate-700"
               >
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <Icon icon={statusConfig?.icon} className="w-5 h-5" />
-                      <span className="font-semibold text-white">{client?.name || 'Unknown Client'}</span>
-                      <span className="text-slate-400 text-sm font-mono">{order.orderNumber}</span>
-                      {storeConfig && storeConfig.id !== 'direct' && (
-                        <span 
-                          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs font-medium"
-                          style={{ backgroundColor: storeConfig.color + '20', color: storeConfig.color }}
-                        >
-                          <img src={storeConfig.icon} alt={storeConfig.label} className="w-3 h-3" />
-                          <span>{storeConfig.label}</span>
-                        </span>
-                      )}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-semibold text-white truncate">{client?.name || 'Unknown Client'}</span>
+                      <span className="text-slate-500 text-xs font-mono">#{order.orderNumber}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span 
-                        className="px-2.5 py-1 rounded-full text-xs font-medium"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
                         style={{ backgroundColor: statusConfig?.color + '20', color: statusConfig?.color }}
                       >
+                        <Icon icon={statusConfig?.icon} className="w-3 h-3" />
                         {statusConfig?.label}
                       </span>
                       {priorityConfig && order.priority !== 'normal' && (
                         <span 
-                          className="px-2.5 py-1 rounded-full text-xs font-medium"
+                          className="px-2 py-1 rounded-full text-xs font-medium"
                           style={{ backgroundColor: priorityConfig.color + '20', color: priorityConfig.color }}
                         >
                           {priorityConfig.label}
                         </span>
                       )}
                       {order.pricing?.balance > 0 && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">
-                          Balance Due
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">
+                          Due: {formatMoney(order.pricing.balance)}
                         </span>
                       )}
                     </div>
-                    <div className="text-slate-300 text-sm mt-2">{order.product?.description}</div>
                   </div>
-                  <div className="text-right ml-4">
-                    <div className="text-xl font-bold text-green-400">
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-white group-hover:text-green-400 transition-colors">
                       {formatMoney(order.pricing?.total || 0)}
                     </div>
-                    {order.pricing?.balance > 0 && (
-                      <div className="text-xs text-yellow-400 mt-1">
-                        Due: {formatMoney(order.pricing.balance)}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -423,12 +452,22 @@ const DashboardView = ({
       ),
       component: (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-lg font-semibold text-white">Upcoming Tasks</h3>
+            {upcomingTasks.length > 0 && (
+              <span className="text-sm text-slate-400">Next 7 days</span>
+            )}
+          </div>
+          
           {upcomingTasks.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
-              No upcoming tasks in the next 7 days
+              <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <p>No upcoming tasks</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {upcomingTasks.map(task => {
                 const dueDate = new Date(task.dueDate)
                 const today = new Date()
@@ -440,15 +479,15 @@ const DashboardView = ({
                 }
                 
                 return (
-                  <div key={task.id} className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors">
+                  <div key={task.id} className="group bg-slate-800/50 hover:bg-slate-800 rounded-lg p-3 transition-all border border-transparent hover:border-slate-700">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="font-medium text-white mb-1">{task.title}</div>
-                        <div className="text-sm text-slate-400">
-                          {daysDiff === 0 ? 'Due today' : `Due in ${daysDiff} day${daysDiff > 1 ? 's' : ''}`}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-white mb-1 truncate">{task.title}</div>
+                        <div className="text-xs text-slate-400">
+                          {daysDiff === 0 ? '⚡ Due today' : `📅 Due in ${daysDiff} day${daysDiff > 1 ? 's' : ''}`}
                         </div>
                       </div>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${priorityColors[task.priority] || priorityColors.low}`}>
+                      <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${priorityColors[task.priority] || priorityColors.low}`}>
                         {task.priority}
                       </span>
                     </div>
@@ -470,26 +509,36 @@ const DashboardView = ({
       ),
       component: (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-lg font-semibold text-white">Active Clients</h3>
+            {activeClients.length > 0 && (
+              <span className="text-sm text-slate-400">Recent activity</span>
+            )}
+          </div>
+          
           {activeClients.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
-              No recent client activity
+              <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <p>No recent activity</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {activeClients.map(client => {
                 const clientOrders = orders.filter(o => o.clientId === client.id)
                 const totalSpent = clientOrders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)
                 
                 return (
-                  <div key={client.id} className="bg-slate-800 rounded-lg p-4 hover:bg-slate-700 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-white">{client.name}</div>
-                        <div className="text-sm text-slate-400">
+                  <div key={client.id} className="group bg-slate-800/50 hover:bg-slate-800 rounded-lg p-3 transition-all border border-transparent hover:border-slate-700">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-white truncate">{client.name}</div>
+                        <div className="text-xs text-slate-400">
                           {clientOrders.length} order{clientOrders.length !== 1 ? 's' : ''}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right flex-shrink-0">
                         <div className="font-semibold text-green-400">{formatMoney(totalSpent)}</div>
                       </div>
                     </div>
@@ -510,18 +559,20 @@ const DashboardView = ({
 
   return (
     <div>
-      {/* Header with widget settings button */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-1">Dashboard</h1>
+          <p className="text-slate-400">Welcome back! Here's your business overview.</p>
+        </div>
         <button
           onClick={() => setShowWidgetSettings(true)}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white font-medium transition-colors flex items-center gap-2"
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white font-medium transition-colors flex items-center gap-2 self-start sm:self-auto"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
           </svg>
-          Customize Widgets
+          Customize
         </button>
       </div>
 

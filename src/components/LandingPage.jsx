@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import CONFIG from '../config/business-config'
+import LegalModal from './modals/LegalModal'
 
 const Icon = ({ icon, className = "w-5 h-5" }) => {
   if (!icon) return null
@@ -21,6 +22,16 @@ const LandingPage = ({
   setMobileMenuOpen, 
   handleGetStarted 
 }) => {
+  const [legalModal, setLegalModal] = useState({ isOpen: false, document: 'privacy' })
+
+  const openLegalModal = (doc) => {
+    setLegalModal({ isOpen: true, document: doc })
+  }
+
+  const closeLegalModal = () => {
+    setLegalModal({ isOpen: false, document: 'privacy' })
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Modern Navigation Bar */}
@@ -48,8 +59,17 @@ const LandingPage = ({
               </a>
               <div className="w-px h-6 bg-slate-700 mx-2"></div>
               <button 
+                onClick={() => setAuthView('clientPortal')}
+                className="ml-2 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-lg transition-all text-sm font-medium flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                <span>Client Portal</span>
+              </button>
+              <button 
                 onClick={() => setAuthView('signin')}
-                className="ml-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg transition-all font-semibold text-sm shadow-lg shadow-blue-500/20"
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg transition-all font-semibold text-sm shadow-lg shadow-blue-500/20"
               >
                 Sign In
               </button>
@@ -101,7 +121,19 @@ const LandingPage = ({
               >
                 About
               </a>
-              <div className="pt-2 border-t border-slate-800">
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <button 
+                  onClick={() => {
+                    setAuthView('clientPortal')
+                    setMobileMenuOpen(false)
+                  }}
+                  className="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg transition-all text-sm font-medium flex items-center justify-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  <span>Client Portal</span>
+                </button>
                 <button 
                   onClick={() => {
                     setAuthView('signin')
@@ -145,7 +177,7 @@ const LandingPage = ({
             
             {/* Subheading */}
             <p className="text-xl md:text-2xl text-slate-400 mb-12 max-w-3xl mx-auto leading-relaxed">
-              A powerful, browser-based CRM designed for artisan businesses, creators, and makers. 
+              A powerful, browser-based CRM designed for businesses of every size. 
               <span className="text-slate-300"> No subscriptions. No limits. Just results.</span>
             </p>
 
@@ -164,7 +196,7 @@ const LandingPage = ({
                 href="#showcase"
                 className="px-8 py-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 rounded-xl text-lg font-semibold transition-all backdrop-blur-sm"
               >
-                View Demo
+                View Screenshots
               </a>
             </div>
 
@@ -195,7 +227,7 @@ const LandingPage = ({
               Everything You Need
           </h2>
             <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-              A complete CRM solution designed for custom businesses, artisans, and creative professionals
+              A complete CRM solution designed for businesses that need flexibility and control
             </p>
           </div>
 
@@ -248,7 +280,7 @@ const LandingPage = ({
       </section>
 
       {/* Showcase Section - Interactive Preview */}
-      <section id="showcase" className="py-20 px-6">
+      <section id="showcase" className="py-20 px-6 bg-gradient-to-b from-slate-900 to-slate-950">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
@@ -259,13 +291,13 @@ const LandingPage = ({
             </p>
           </div>
           
-          {/* Mock Interface Preview */}
-          <div className="relative">
+          {/* Screenshot Carousel */}
+          <div className="relative max-w-6xl mx-auto">
             {/* Glow Effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 blur-3xl"></div>
             
             <div className="relative bg-slate-900/90 backdrop-blur-xl border border-slate-800/50 rounded-2xl overflow-hidden shadow-2xl">
-              {/* Mock Browser Header */}
+              {/* Browser Chrome */}
               <div className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center space-x-2">
                 <div className="flex space-x-2">
                   <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
@@ -273,56 +305,116 @@ const LandingPage = ({
                   <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
                 </div>
                 <div className="flex-1 text-center">
-                  <div className="inline-flex items-center space-x-2 bg-slate-800 rounded-lg px-4 py-1">
-                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="inline-flex items-center space-x-2 bg-slate-800 rounded-lg px-4 py-1.5">
+                    <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
-                    <span className="text-sm text-slate-400">localhost:3000/crm</span>
+                    <span className="text-sm text-slate-400">anchor-crm.app</span>
                   </div>
                 </div>
               </div>
               
-              {/* Mock Kanban Board */}
-              <div className="p-8 bg-gradient-to-br from-slate-950 to-slate-900">
-                <div className="flex space-x-4 overflow-x-auto pb-4">
-                  {[
-                    { name: 'Quote', color: 'from-indigo-600 to-indigo-700', count: 3 },
-                    { name: 'Confirmed', color: 'from-amber-600 to-amber-700', count: 5 },
-                    { name: 'In Progress', color: 'from-cyan-600 to-cyan-700', count: 4 },
-                    { name: 'Ready', color: 'from-purple-600 to-purple-700', count: 2 }
-                  ].map((status, i) => (
-                    <div key={i} className="flex-shrink-0 w-72">
-                      <div className="bg-slate-900/80 backdrop-blur-sm border border-slate-800/50 rounded-xl overflow-hidden">
-                        {/* Column Header */}
-                        <div className={`bg-gradient-to-r ${status.color} p-4`}>
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-white">{status.name}</span>
-                            <span className="bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full text-xs text-white font-medium">{status.count}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Cards */}
-                        <div className="p-4 space-y-3">
-                          {[1, 2].map((card) => (
-                            <div key={card} className="bg-slate-800/80 rounded-lg p-4 border border-slate-700/50 hover:border-slate-600 transition-all cursor-pointer group">
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="text-sm font-semibold text-white">Order #{1000 + i * 10 + card}</div>
-                                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                              </div>
-                              <div className="text-xs text-slate-400 mb-3">Custom furniture commission</div>
-                              <div className="flex justify-between items-center pt-3 border-t border-slate-700/50">
-                                <span className="text-green-400 font-mono text-sm font-bold">$1,{(250 + card * 100).toLocaleString()}</span>
-                                <span className="text-xs text-slate-500">{card + 2} days</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+              {/* Screenshots Container */}
+              <div className="relative bg-gradient-to-br from-slate-950 to-slate-900 overflow-hidden" style={{ minHeight: '500px' }}>
+                {/* Placeholder Screenshots - Will be replaced with actual screenshots */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-8">
+                  {/* Dashboard Preview */}
+                  <div className="bg-slate-800/50 rounded-lg border border-slate-700/50 p-4 hover:border-blue-500/30 transition-all group cursor-pointer">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-sm font-semibold text-slate-300">Dashboard</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3 bg-gradient-to-r from-blue-500/30 to-transparent rounded"></div>
+                      <div className="h-3 bg-gradient-to-r from-purple-500/30 to-transparent rounded w-3/4"></div>
+                      <div className="grid grid-cols-3 gap-2 mt-4">
+                        <div className="h-16 bg-slate-700/50 rounded"></div>
+                        <div className="h-16 bg-slate-700/50 rounded"></div>
+                        <div className="h-16 bg-slate-700/50 rounded"></div>
                       </div>
                     </div>
-                  ))}
+                    <div className="mt-3 text-xs text-slate-500 group-hover:text-blue-400 transition-colors">Revenue tracking, order stats, quick actions →</div>
+                  </div>
+
+                  {/* Kanban Preview */}
+                  <div className="bg-slate-800/50 rounded-lg border border-slate-700/50 p-4 hover:border-purple-500/30 transition-all group cursor-pointer">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      <span className="text-sm font-semibold text-slate-300">Kanban Board</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[1, 2, 3, 4].map(col => (
+                        <div key={col} className="space-y-2">
+                          <div className="h-2 bg-purple-500/30 rounded"></div>
+                          <div className="h-12 bg-slate-700/50 rounded"></div>
+                          <div className="h-12 bg-slate-700/50 rounded"></div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500 group-hover:text-purple-400 transition-colors">Visual workflow management →</div>
+                  </div>
+
+                  {/* Clients Preview */}
+                  <div className="bg-slate-800/50 rounded-lg border border-slate-700/50 p-4 hover:border-emerald-500/30 transition-all group cursor-pointer">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                      <span className="text-sm font-semibold text-slate-300">Client Management</span>
+                    </div>
+                    <div className="space-y-2">
+                      {[1, 2, 3].map(row => (
+                        <div key={row} className="flex items-center space-x-2">
+                          <div className="w-8 h-8 bg-gradient-to-br from-emerald-500/30 to-blue-500/30 rounded-full"></div>
+                          <div className="flex-1 space-y-1">
+                            <div className="h-2 bg-slate-700/50 rounded w-2/3"></div>
+                            <div className="h-2 bg-slate-700/50 rounded w-1/2"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500 group-hover:text-emerald-400 transition-colors">Contact info, order history, portal access →</div>
+                  </div>
+
+                  {/* Analytics Preview */}
+                  <div className="bg-slate-800/50 rounded-lg border border-slate-700/50 p-4 hover:border-cyan-500/30 transition-all group cursor-pointer">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <div className="w-2 h-2 bg-cyan-500 rounded-full"></div>
+                      <span className="text-sm font-semibold text-slate-300">Analytics</span>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-end space-x-1 h-20">
+                        {[40, 65, 45, 80, 55, 70, 50].map((height, i) => (
+                          <div key={i} className="flex-1 bg-gradient-to-t from-cyan-500/30 to-blue-500/30 rounded-t" style={{ height: `${height}%` }}></div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500 group-hover:text-cyan-400 transition-colors">Revenue trends, growth metrics →</div>
+                  </div>
+                </div>
+
+                {/* Note about screenshots */}
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
+                  <div className="bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-full px-4 py-2 flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs text-slate-400">Live interface preview</span>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Feature Highlights Below Screenshots */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-12 max-w-5xl mx-auto">
+            {[
+              { icon: '📊', label: 'Real-time Dashboard' },
+              { icon: '🎯', label: 'Kanban Workflow' },
+              { icon: '👥', label: 'Client Portal' },
+              { icon: '📈', label: 'Growth Analytics' }
+            ].map((feature, i) => (
+              <div key={i} className="text-center p-4 bg-slate-900/50 backdrop-blur-sm border border-slate-800/50 rounded-xl hover:border-blue-500/30 transition-all">
+                <div className="text-3xl mb-2">{feature.icon}</div>
+                <div className="text-sm text-slate-400">{feature.label}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -409,15 +501,39 @@ const LandingPage = ({
               <span className="text-2xl font-bold tracking-tight">ANCHOR</span>
             </div>
             <p className="text-slate-400 mb-6">
-              {CONFIG.business.tagline}
+              by Probably Fine Studios
             </p>
+          </div>
+
+          {/* Legal Links */}
+          <div className="flex justify-center gap-6 mb-6">
+            <button
+              onClick={() => openLegalModal('privacy')}
+              className="text-sm text-slate-400 hover:text-blue-400 transition-colors"
+            >
+              Privacy Policy
+            </button>
+            <span className="text-slate-700">•</span>
+            <button
+              onClick={() => openLegalModal('terms')}
+              className="text-sm text-slate-400 hover:text-blue-400 transition-colors"
+            >
+              Terms of Service
+            </button>
+            <span className="text-slate-700">•</span>
+            <button
+              onClick={() => openLegalModal('license')}
+              className="text-sm text-slate-400 hover:text-blue-400 transition-colors"
+            >
+              License
+            </button>
           </div>
 
           {/* Divider */}
           <div className="border-t border-slate-800 pt-8">
             <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
               <p className="text-sm text-slate-500">
-                © 2026 ANCHOR CRM. Built with React & Tailwind CSS.
+                © 2026 Probably Fine Studios. Built with React & Tailwind CSS.
               </p>
               <div className="flex items-center space-x-6 text-sm text-slate-500">
                 <span>100% Browser-Based</span>
@@ -430,6 +546,13 @@ const LandingPage = ({
           </div>
         </div>
       </footer>
+
+      {/* Legal Modal */}
+      <LegalModal
+        isOpen={legalModal.isOpen}
+        onClose={closeLegalModal}
+        document={legalModal.document}
+      />
     </div>
   )
 }
